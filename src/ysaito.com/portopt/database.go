@@ -96,6 +96,18 @@ func (db Database) FillFromCsv(path string, ticker string) (error) {
 	return nil
 }
 
+func (db Database) FillFromYahooIfNecessary(ticker string) (error) {
+	now := time.Now();
+	_, maxDate := db.GetDateRange(ticker)
+	if maxDate.IsZero() || (now.Sub(maxDate) >= time.Hour * 24 * 14) {
+		log.Print("Filling ", ticker, " from interweb")
+		return db.FillFromYahoo(ticker)
+	} else {
+		log.Print(ticker, " is already in the database")
+	}
+	return nil
+}
+
 func (db Database) FillFromYahoo(ticker string) (error) {
 	url := fmt.Sprintf("http://ichart.finance.yahoo.com/table.csv?s=%s&a=00&b=0&c=1980&d=01&e=1&f=2015&g=d&ignore=.csv", ticker)
 	resp, err := http.Get(url)
@@ -151,6 +163,8 @@ func (db Database) TableExists(table string) (bool) {
 }
 
 func (db Database) GetDateRange(ticker string) (minDate time.Time, maxDate time.Time) {
+	minDate = time.Now()
+	// maxDate is zero by default
 	db.MustRunQuery(
 		fmt.Sprintf("SELECT MIN(date), MAX(date) FROM price WHERE ticker='%s'", ticker),
 		func(val... interface{}) {
@@ -164,6 +178,9 @@ func (db Database) GetDateRange(ticker string) (minDate time.Time, maxDate time.
 	return minDate, maxDate
 }
 
+func (db Database) FillCorrelationIfNecessary(ticker1 string, ticker2 string) (error) {
+	return nil
+}
 
 func CreateDb(path string) (*Database) {
 	sqlite3.Initialize()
@@ -177,6 +194,10 @@ func CreateDb(path string) (*Database) {
 	d.db = db
 	if !d.TableExists("dividend") {
 		d.MustUpdate("CREATE TABLE dividend (ticker VARCHAR(10), date INTEGER, dividend REAL)");
+	}
+	if !d.TableExists("correlation") {
+		d.MustUpdate("CREATE TABLE correlation (ticker1 VARCHAR(10), ticker2 VARCHAR(10), corr REAL, lastUpdateDate INTEGER)");
+		d.MustUpdate("CREATE INDEX correlation_index ON correlation (ticker1, ticker2)")
 	}
 	if !d.TableExists("price") {
 		d.MustUpdate("CREATE TABLE price (ticker VARCHAR(10), date INTEGER, open REAL, high REAL, low REAL, close REAL, volume INTEGER, adjclose REAL)");
