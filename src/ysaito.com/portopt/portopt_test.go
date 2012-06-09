@@ -5,6 +5,7 @@ import "os"
 import "fmt"
 import "testing"
 import "time"
+import "math"
 
 var pathSeq int = 0;
 
@@ -23,17 +24,9 @@ func TestCreate(t *testing.T) {
 	err := db.FillFromCsv("C.bak", "C")
 	if err != nil { t.Fatal(err) }
 
-	min, max := db.GetDateRange("FOOBAR")
-	log.Print("FOO range: [", min, "..", max, "]")
-	if !max.IsZero()  { t.Error("Range: ", min, max) }
-
-	min, max = db.GetDateRange("C")
-	if !min.Equal(time.Date(1977, time.Month(1), 3, 0, 0, 0, 0, time.UTC)) {
-		t.Error("Min: ", min.Unix())
-	}
-	if !max.Equal(time.Date(2012, time.Month(6), 1, 0, 0, 0, 0, time.UTC)) {
-		t.Error("Max: ", max)
-	}
+	r := db.GetDateRange("FOOBAR")
+	log.Print("FOO range: [", r.Start(), "..", r.End(), "]")
+	if !r.Empty()  { t.Error("Range: ", r.Start(), r.End()) }
 }
 
 func TestSecurity(t *testing.T) {
@@ -41,11 +34,21 @@ func TestSecurity(t *testing.T) {
 	err := db.FillFromCsv("C.bak", "C")
 	if err != nil { t.Fatal(err) }
 
-	c := NewSecurity(db, "C", 1.0)
-	corr := Correlation(c, c)
+	corr, err := db.Correlation("C", "C")
+	if err != nil { t.Fail() }
 	if corr < 0.99 || corr >= 1.01 { t.Fatal(corr) }
 }
 
+func TestDateRange(t *testing.T) {
+	d := NewDateRange(
+		time.Date(1980, time.Month(1), 1, 0, 0, 0, 0, time.UTC),
+		time.Date(1980, time.Month(12), 31, 0, 0, 0, 0, time.UTC),
+		time.Duration(time.Hour * 24 * 30))
+
+	for i := d.Begin(); !i.Done(); i.Next() {
+		log.Print("ITER: ", i.Time())
+	}
+}
 
 func TestEff(t *testing.T) {
 	err := os.MkdirAll("/tmp/portopt_test", 0700)
@@ -54,42 +57,53 @@ func TestEff(t *testing.T) {
 	path := "/tmp/portopt_test/eff.db"
 	db := CreateDb(path)
 
-	portfolio := map[string]float64 {
-		"VCADX" : 1.0,  // CA interm bond
-		"VTMGX" : 1.0,  // tax-managed intel
-		"VPCCX" : 1.0,  // Primecap core
-		"VVIAX" : 1.0,  // value index adm
-		"VMVIX" : 1.0,  // mid-cap value index inv
-		"VMVAX" : 1.0,  // mid-cap value index adm
-		"VIMSX" : 1.0,  // mid-cap index inv
-		"VIMAX" : 1.0,  // mid-cap index adm
-		"VTMSX" : 1.0,  // T-M smallcap
-		"VGHAX" : 1.0, // Healthcare adm
-		"VGHCX" : 1.0, // Healthcare inv
-		"VSS" : 1.0,  // Ex-us smallcap ETF
-		"VWO" : 1.0,  // Emerging market ETF
-		"DLS" : 1.0,  // Wisdomtree intl smallcap dividend
-		"VSIAX" : 1.0, // Small-cap value index adm
-		"VISVX" : 1.0, // small-cap value index inv
-	}
+	portfolio := NewPortfolio(db,
+		NewDateRange(time.Date(1980, time.Month(1), 1, 0, 0, 0, 0, time.UTC),
+		time.Now(),
+		time.Duration(time.Hour * 24 * 30)))
+	portfolio.Add("VCADX", 1.0)  // CA interm bond
+/*
+ 	portfolio.Add("VTMGX", 1.0) // tax-managed intl
+	portfolio.Add("VPCCX", 1.0) // Primecap core
 
+	portfolio.Add("VVIAX", 1.0) // value index adm
+	portfolio.Add("VMVIX", 1.0) // mid-cap value index inv
+	portfolio.Add("VMVAX", 1.0) // mid-cap value index adm
+	portfolio.Add("VIMSX", 1.0) // mid-cap index inv
+	portfolio.Add("VIMAX", 1.0) // mid-cap index adm
+	portfolio.Add("VTMSX", 1.0) // T-M smallcap
+	portfolio.Add("VGHAX", 1.0) // Healthcare adm
+	portfolio.Add("VGHCX", 1.0) // Healthcare inv
+	portfolio.Add("VSS", 1.0)  // Ex-us smallcap ETF
+	portfolio.Add("VWO", 1.0)  // Emerging market ETF
+	portfolio.Add("DLS", 1.0)  // Wisdomtree intl smallcap dividend
+	portfolio.Add("VSIAX", 1.0) // Small-cap value index adm
+	portfolio.Add("VISVX", 1.0) // small-cap value index inv
+*/
+	portfolio.Finalize()
 
-	for ticker, _ := range portfolio {
-		err = db.FillFromYahooIfNecessary(ticker)
+	combinedVariance := 0.0
+	combinedMean := 0.0
+	for _, t1 := range portfolio.Tickers() {
+		w1 := portfolio.Weight(t1) / portfolio.TotalWeight()
+		stats1, err := db.Stats(t1, portfolio.DateRange())
 		if err != nil { panic(err) }
-	}
 
-	tickers := make(map[string]*Security)
+		combinedMean += w1 * stats1.Mean
+		for _, t2 := range portfolio.Tickers() {
+			w2 := portfolio.Weight(t2) / portfolio.TotalWeight()
+			corr, err := db.Correlation(t1, t2)
+			if err != nil { panic(err) }
 
-	for ticker, weight := range portfolio {
-		tickers[ticker] = NewSecurity(db, ticker, weight)
-	}
-
-	for t1, s1 := range tickers {
-		for t2, s2 := range tickers {
-			log.Print("CORR(", t1, ", ", t2, ")=",
-				Correlation(s1, s2))
+			stats2, err := db.Stats(t2, portfolio.DateRange())
+			if err != nil { panic(err) }
+			combinedVariance += w1 * w2 * corr * stats1.Stddev * stats2.Stddev
+			log.Print("CORR(", t1, ", ", t2, ")=", corr)
 		}
 	}
+	x, _ := db.Stats("VCADX", portfolio.DateRange())
+	log.Print("VCADX: ", x.Mean, ", ", x.Stddev)
+	log.Print("Combined: ", combinedVariance, " ", math.Sqrt(combinedVariance))
+	log.Print("Mean: ", combinedMean)
 }
 

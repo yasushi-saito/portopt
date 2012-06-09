@@ -16,10 +16,143 @@ import "fmt"
 
 var dateRe *regexp.Regexp
 
+const samplingIntervalSecs = (3600 * 24 * 24)
+const samplingInterval = time.Duration(time.Second * samplingIntervalSecs)
+
 type Database struct {
 	Path string
 	db *sqlite3.Database
+	cachedSecurities map[string]*Security
+	correlationCache map[TickerPair]float64
 };
+
+// Cache of database entry.
+type Security struct {
+	Ticker string
+	Weight float64
+	dateRange *dateRange
+
+	// Date (UNIX time) -> Adjusted closing price, as reported by yahoo.
+	priceMap map[int64]float64
+};
+
+type TickerPair struct {
+	ticker1 string
+	ticker2 string
+}
+
+type SecurityStats struct {
+	Mean float64
+	Stddev float64
+}
+
+func (db *Database) Stats(ticker string, r *dateRange) (SecurityStats, error) {
+	var stats SecurityStats;
+	acc := new(statsAccumulator);
+
+	s1, err := db.FindSecurity(ticker)
+	if err != nil { return stats, err }
+	for _, price := range s1.priceMap {
+		acc.Add(price)
+	}
+
+	stats.Mean = acc.Mean()
+	stats.Stddev = acc.StdDev()
+	return stats, nil
+}
+
+func (db *Database) Correlation (ticker1 string, ticker2 string) (float64, error) {
+	p := TickerPair{ ticker1: ticker1, ticker2 : ticker2 }
+	if p.ticker1 == p.ticker2 { return 1.0, nil }
+	if p.ticker1 > p.ticker2 {
+		p.ticker1, p.ticker2 = p.ticker2, p.ticker1
+	}
+	corr, found := db.correlationCache[p]
+	if found { return corr, nil }
+
+	s1, err := db.FindSecurity(ticker1)
+	if err != nil { return -1.0, err }
+
+	s2, err := db.FindSecurity(ticker2)
+	if err != nil { return -1.0, err }
+
+	dateRange := s1.dateRange.Intersect(s1.dateRange)
+
+	stats1 := new(statsAccumulator);
+	stats2 := new(statsAccumulator);
+
+	for i := dateRange.Begin(); !i.Done(); i.Next() {
+		t := i.Time().Unix()
+		stats1.Add(s1.priceMap[t])
+		stats2.Add(s2.priceMap[t])
+	}
+
+	var diffTotal float64 = 0.0
+	for i := dateRange.Begin(); !i.Done(); i.Next() {
+		t := i.Time().Unix()
+		value1 := s1.priceMap[t]
+		value2 := s2.priceMap[t]
+		diffTotal += (value1 - stats1.Mean()) * (value2 - stats2.Mean())
+	}
+
+	corr = diffTotal / float64(stats1.NumItems()) / stats1.StdDev() / stats2.StdDev()
+	db.correlationCache[p] = corr
+	return corr, nil
+}
+
+func searchPrice(db *Database,
+	ticker string,
+	date time.Time,
+	interval time.Duration) (float64) {
+	price := -1.0
+	limitDate := date.Add(interval)
+	db.MustRunQuery(fmt.Sprintf(
+		"SELECT adjclose from price WHERE ticker = '%s' AND date >= %d AND date < %d ORDER BY date LIMIT 1",
+		ticker, date.Unix(), limitDate.Unix()),
+		func(val... interface{}) {
+		price = val[0].(float64)
+	})
+	return price
+}
+
+func (db *Database) FindSecurity(ticker string) (*Security, error) {
+	s, found := db.cachedSecurities[ticker]
+	if found {
+		// TODO: check staleness
+		return s, nil
+	}
+
+	now := time.Now()
+	dateRange := db.GetDateRange(ticker)
+	if dateRange.Empty() || (now.Sub(dateRange.End()) >= samplingInterval * 2) {
+		log.Print("Filling ", ticker, " from interweb")
+		err := db.fillFromYahoo(ticker)
+		if err != nil { return nil, err }
+	}
+	s = new(Security)
+	s.Ticker = ticker
+	s.priceMap = make(map[int64]float64)
+
+	var minDate time.Time
+	var maxDate time.Time
+	for i := dateRange.Begin(); !i.Done(); i.Next() {
+		price := searchPrice(db, ticker, i.Time(), samplingInterval)
+		if price >= 0.0 {
+			if minDate.IsZero() || minDate.After(i.Time()) {
+				minDate = i.Time()
+			}
+			if maxDate.IsZero() || maxDate.Before(i.Time()) {
+				maxDate = i.Time()
+			}
+			s.priceMap[i.Time().Unix()] = price
+		} else {
+			break;
+		}
+	}
+	s.dateRange = NewDateRange(minDate, maxDate, samplingInterval)
+	db.cachedSecurities[ticker] = s
+	return s, nil;
+}
 
 func PanicOnError(err error, params... interface{}) {
 	if err != nil {
@@ -96,19 +229,7 @@ func (db Database) FillFromCsv(path string, ticker string) (error) {
 	return nil
 }
 
-func (db Database) FillFromYahooIfNecessary(ticker string) (error) {
-	now := time.Now();
-	_, maxDate := db.GetDateRange(ticker)
-	if maxDate.IsZero() || (now.Sub(maxDate) >= time.Hour * 24 * 14) {
-		log.Print("Filling ", ticker, " from interweb")
-		return db.FillFromYahoo(ticker)
-	} else {
-		log.Print(ticker, " is already in the database")
-	}
-	return nil
-}
-
-func (db Database) FillFromYahoo(ticker string) (error) {
+func (db Database) fillFromYahoo(ticker string) (error) {
 	url := fmt.Sprintf("http://ichart.finance.yahoo.com/table.csv?s=%s&a=00&b=0&c=1980&d=01&e=1&f=2015&g=d&ignore=.csv", ticker)
 	resp, err := http.Get(url)
 	if err != nil {
@@ -162,8 +283,9 @@ func (db Database) TableExists(table string) (bool) {
 	return found
 }
 
-func (db Database) GetDateRange(ticker string) (minDate time.Time, maxDate time.Time) {
-	minDate = time.Now()
+func (db Database) GetDateRange(ticker string) (*dateRange) {
+	minDate := time.Now()
+	var maxDate time.Time
 	// maxDate is zero by default
 	db.MustRunQuery(
 		fmt.Sprintf("SELECT MIN(date), MAX(date) FROM price WHERE ticker='%s'", ticker),
@@ -175,7 +297,7 @@ func (db Database) GetDateRange(ticker string) (minDate time.Time, maxDate time.
 			maxDate = time.Unix(val[1].(int64), 0)
 		}
 	})
-	return minDate, maxDate
+	return NewDateRange(minDate, maxDate, samplingInterval)
 }
 
 func (db Database) FillCorrelationIfNecessary(ticker1 string, ticker2 string) (error) {
@@ -192,6 +314,8 @@ func CreateDb(path string) (*Database) {
 	var d *Database = new(Database);
 	d.Path = path
 	d.db = db
+	d.cachedSecurities = make(map[string]*Security)
+	d.correlationCache = make(map[TickerPair]float64)
 	if !d.TableExists("dividend") {
 		d.MustUpdate("CREATE TABLE dividend (ticker VARCHAR(10), date INTEGER, dividend REAL)");
 	}
