@@ -76,7 +76,7 @@ func (db *Database) Correlation (ticker1 string, ticker2 string) (float64, error
 	s2, err := db.FindSecurity(ticker2)
 	if err != nil { return -1.0, err }
 
-	dateRange := s1.dateRange.Intersect(s1.dateRange)
+	dateRange := s1.dateRange.Intersect(s2.dateRange)
 
 	stats1 := new(statsAccumulator);
 	stats2 := new(statsAccumulator);
@@ -94,7 +94,6 @@ func (db *Database) Correlation (ticker1 string, ticker2 string) (float64, error
 		value2 := s2.priceMap[t]
 		diffTotal += (value1 - stats1.Mean()) * (value2 - stats2.Mean())
 	}
-
 	corr = diffTotal / float64(stats1.NumItems()) / stats1.StdDev() / stats2.StdDev()
 	db.correlationCache[p] = corr
 	return corr, nil
@@ -124,7 +123,7 @@ func (db *Database) FindSecurity(ticker string) (*Security, error) {
 
 	now := time.Now()
 	dateRange := db.GetDateRange(ticker)
-	if dateRange.Empty() || (now.Sub(dateRange.End()) >= samplingInterval * 2) {
+	if dateRange.Empty() || (now.Sub(dateRange.End()) >= samplingInterval * 4) {
 		log.Print("Filling ", ticker, " from interweb")
 		err := db.fillFromYahoo(ticker)
 		if err != nil { return nil, err }

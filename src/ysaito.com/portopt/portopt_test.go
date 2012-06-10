@@ -57,48 +57,47 @@ func TestEff(t *testing.T) {
 	path := "/tmp/portopt_test/eff.db"
 	db := CreateDb(path)
 
-	portfolio := NewPortfolio(db,
-		NewDateRange(time.Date(1980, time.Month(1), 1, 0, 0, 0, 0, time.UTC),
+	dateRange := NewDateRange(time.Date(1980, time.Month(1), 1, 0, 0, 0, 0, time.UTC),
 		time.Now(),
-		time.Duration(time.Hour * 24 * 30)))
-	portfolio.Add("VCADX", 1.0)  // CA interm bond
-/*
- 	portfolio.Add("VTMGX", 1.0) // tax-managed intl
-	portfolio.Add("VPCCX", 1.0) // Primecap core
+		time.Duration(time.Hour * 24 * 30))
+	portfolio := NewPortfolio(db, dateRange, map[string]float64{
+		"VCADX": 1.0,  // CA interm bond
+ 		"VTMGX": 1.0, // tax-managed intl
+		"VPCCX": 1.0, // Primecap core
 
-	portfolio.Add("VVIAX", 1.0) // value index adm
-	portfolio.Add("VMVIX", 1.0) // mid-cap value index inv
-	portfolio.Add("VMVAX", 1.0) // mid-cap value index adm
-	portfolio.Add("VIMSX", 1.0) // mid-cap index inv
-	portfolio.Add("VIMAX", 1.0) // mid-cap index adm
-	portfolio.Add("VTMSX", 1.0) // T-M smallcap
-	portfolio.Add("VGHAX", 1.0) // Healthcare adm
-	portfolio.Add("VGHCX", 1.0) // Healthcare inv
-	portfolio.Add("VSS", 1.0)  // Ex-us smallcap ETF
-	portfolio.Add("VWO", 1.0)  // Emerging market ETF
-	portfolio.Add("DLS", 1.0)  // Wisdomtree intl smallcap dividend
-	portfolio.Add("VSIAX", 1.0) // Small-cap value index adm
-	portfolio.Add("VISVX", 1.0) // small-cap value index inv
-*/
-	portfolio.Finalize()
+		"VVIAX": 1.0, // value index adm
+		"VMVIX": 1.0, // mid-cap value index inv
+		"VMVAX": 1.0, // mid-cap value index adm
+		"VIMSX": 1.0, // mid-cap index inv
+		"VIMAX": 1.0, // mid-cap index adm
+		"VTMSX": 1.0, // T-M smallcap
+		"VGHAX": 1.0, // Healthcare adm
+		"VGHCX": 1.0, // Healthcare inv
+		"VSS": 1.0,  // Ex-us smallcap ETF
+		"DLS": 1.0,  // Wisdomtree intl smallcap dividend
+		"VWO": 1.0,  // Emerging market ETF
+		"VSIAX": 1.0, // Small-cap value index adm
+		"VISVX": 1.0, // small-cap value index inv
+	})
 
 	combinedVariance := 0.0
 	combinedMean := 0.0
-	for _, t1 := range portfolio.Tickers() {
-		w1 := portfolio.Weight(t1) / portfolio.TotalWeight()
-		stats1, err := db.Stats(t1, portfolio.DateRange())
+	for _, e1 := range portfolio.List() {
+		w1 := e1.weight / portfolio.TotalWeight()
+		stats1, err := db.Stats(e1.ticker, portfolio.DateRange())
 		if err != nil { panic(err) }
 
 		combinedMean += w1 * stats1.Mean
-		for _, t2 := range portfolio.Tickers() {
-			w2 := portfolio.Weight(t2) / portfolio.TotalWeight()
-			corr, err := db.Correlation(t1, t2)
+		for _, e2 := range portfolio.List() {
+			w2 := e2.weight / portfolio.TotalWeight()
+			stats2, err := db.Stats(e2.ticker, portfolio.DateRange())
 			if err != nil { panic(err) }
 
-			stats2, err := db.Stats(t2, portfolio.DateRange())
+			corr, err := db.Correlation(e1.ticker, e2.ticker)
 			if err != nil { panic(err) }
+
 			combinedVariance += w1 * w2 * corr * stats1.Stddev * stats2.Stddev
-			log.Print("CORR(", t1, ", ", t2, ")=", corr)
+			log.Print("CORR(", e1.ticker, ", ", e2.ticker, ")=", corr)
 		}
 	}
 	x, _ := db.Stats("VCADX", portfolio.DateRange())

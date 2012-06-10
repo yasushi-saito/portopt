@@ -4,24 +4,34 @@
 //
 
 package portopt
+// import "math/rand"
 
 type portfolioEntry struct {
+	ticker string
 	weight float64
 }
 
 type Portfolio struct {
 	db *Database
-	securities map[string]*portfolioEntry
+	securities []portfolioEntry
 	totalWeight float64
 	dateRange *dateRange
-	finalized bool
 }
 
-func NewPortfolio(db *Database, dateRange *dateRange) (p *Portfolio) {
+func NewPortfolio(db *Database,
+	dateRange *dateRange,
+	securities map[string]float64) (p *Portfolio) {
 	p = new(Portfolio)
 	p.db = db
-	p.securities = make(map[string]*portfolioEntry);
+	p.securities = make([]portfolioEntry, len(securities))
 	p.dateRange = dateRange
+	n := 0
+	for s, w := range securities {
+		p.securities[n].ticker = s
+		p.securities[n].weight = w
+		p.totalWeight += w
+		n++
+	}
 	return p
 }
 
@@ -34,29 +44,13 @@ func (p *Portfolio) TotalWeight() (float64) {
 }
 
 func (p *Portfolio) Weight(ticker string) (float64) {
-	return p.securities[ticker].weight
-}
-
-func (p *Portfolio) Tickers() ([]string) {
-	var x []string
-	for key, _ := range(p.securities) {
-		x = append(x, key)
-	}
-	return x
-}
-
-func (p *Portfolio) Add(ticker string, weight float64) (error) {
-	if p.finalized { panic("Portfolio already finalized") }
-	e := new(portfolioEntry)
-	e.weight = weight
-	p.securities[ticker] = e
-	return nil
-}
-
-func (p *Portfolio) Finalize() {
-	p.finalized = true
-	p.totalWeight = 0.0
 	for _, e := range p.securities {
-		p.totalWeight += e.weight
+		if (e.ticker == ticker) { return e.weight }
 	}
+	return 0.0
 }
+
+func (p *Portfolio) List() ([]portfolioEntry) {
+	return p.securities
+}
+
