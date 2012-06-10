@@ -50,6 +50,31 @@ func TestDateRange(t *testing.T) {
 	}
 }
 
+func compute(p *Portfolio) {
+	combinedVariance := 0.0
+	combinedMean := 0.0
+	db := p.Db()
+	for _, e1 := range p.List() {
+		w1 := e1.weight / p.TotalWeight()
+		stats1, err := db.Stats(e1.ticker, p.DateRange())
+		if err != nil { panic(err) }
+
+		combinedMean += w1 * stats1.Mean
+		for _, e2 := range p.List() {
+			w2 := e2.weight / p.TotalWeight()
+			stats2, err := db.Stats(e2.ticker, p.DateRange())
+			if err != nil { panic(err) }
+
+			corr, err := db.Correlation(e1.ticker, e2.ticker)
+			if err != nil { panic(err) }
+
+			combinedVariance += w1 * w2 * corr * stats1.Stddev * stats2.Stddev
+			// log.Print("CORR(", e1.ticker, ", ", e2.ticker, ")=", corr)
+		}
+	}
+	log.Print("Mean: ", combinedMean, "Stddev: ", math.Sqrt(combinedVariance) / combinedMean)
+}
+
 func TestEff(t *testing.T) {
 	err := os.MkdirAll("/tmp/portopt_test", 0700)
 	if err != nil { t.Fatal(err) }
@@ -79,30 +104,11 @@ func TestEff(t *testing.T) {
 		"VSIAX": 1.0, // Small-cap value index adm
 		"VISVX": 1.0, // small-cap value index inv
 	})
-
-	combinedVariance := 0.0
-	combinedMean := 0.0
-	for _, e1 := range portfolio.List() {
-		w1 := e1.weight / portfolio.TotalWeight()
-		stats1, err := db.Stats(e1.ticker, portfolio.DateRange())
-		if err != nil { panic(err) }
-
-		combinedMean += w1 * stats1.Mean
-		for _, e2 := range portfolio.List() {
-			w2 := e2.weight / portfolio.TotalWeight()
-			stats2, err := db.Stats(e2.ticker, portfolio.DateRange())
-			if err != nil { panic(err) }
-
-			corr, err := db.Correlation(e1.ticker, e2.ticker)
-			if err != nil { panic(err) }
-
-			combinedVariance += w1 * w2 * corr * stats1.Stddev * stats2.Stddev
-			log.Print("CORR(", e1.ticker, ", ", e2.ticker, ")=", corr)
-		}
+	compute(portfolio)
+	q := portfolio.RandomMutate()
+	for i := 0; i < 100; i++ {
+		q = q.RandomMutate()
+		compute(q)
 	}
-	x, _ := db.Stats("VCADX", portfolio.DateRange())
-	log.Print("VCADX: ", x.Mean, ", ", x.Stddev)
-	log.Print("Combined: ", combinedVariance, " ", math.Sqrt(combinedVariance))
-	log.Print("Mean: ", combinedMean)
 }
 

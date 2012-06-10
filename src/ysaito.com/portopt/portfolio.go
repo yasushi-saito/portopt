@@ -4,7 +4,7 @@
 //
 
 package portopt
-// import "math/rand"
+import "math/rand"
 
 type portfolioEntry struct {
 	ticker string
@@ -34,6 +34,38 @@ func NewPortfolio(db *Database,
 	}
 	return p
 }
+
+func (p *Portfolio) RandomMutate() (*Portfolio) {
+	n := len(p.securities)
+	delta := p.totalWeight * 0.02;
+	q := Portfolio{
+		db: p.db,
+		securities: make([]portfolioEntry, n),
+	        totalWeight: 0.0, // filled later
+	        dateRange: p.dateRange,
+	}
+	for i, e := range p.securities {
+		q.securities[i] = e
+	}
+
+	tmp := delta
+	for true {
+		i := rand.Intn(n)
+		if q.securities[i].weight > tmp {
+			q.securities[i].weight -= tmp
+			break
+		} else {
+			tmp -= q.securities[i].weight
+			q.securities[i].weight = 0
+		}
+	}
+	for _, e := range q.securities {
+		q.totalWeight += e.weight
+	}
+	return &q
+}
+
+func (p *Portfolio) Db() (*Database) { return p.db }
 
 func (p *Portfolio) DateRange() (*dateRange) {
 	return p.dateRange
