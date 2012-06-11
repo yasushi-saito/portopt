@@ -3,21 +3,19 @@
 //
 
 package rbtree
-type color {
-	Red = iota
-	Black = 1 + iota
-}
+const Red = iota
+const Black = 1 + iota
 
 type node struct {
 	key interface{}
 	value interface{}
-	parent, left, right *tree
-	color color
+	parent, left, right *node
+	color int
 }
 
-type Root {
+type Root struct {
 	tree *node
-	func compare(k1, k2 interface{}) bool
+	compare func(k1, k2 interface{}) int
 }
 
 func (n *node) isLeftChild() bool {
@@ -28,59 +26,55 @@ func (n *node) isRightChild() bool {
 	return n == n.parent.right
 }
 
-func NewTree(func compare(k1, k2 interface{})) *Root {
+func NewTree(compare func(k1, k2 interface{}) int) *Root {
 	r := new(Root)
-	r.compare := compare
+	r.compare = compare
 	return r
 }
 
-func (r *Root) doInsert(n *tree) {
-	if r.parent == nil {
-		n.Position(r.parent)
-		r.parent = &n
+func (r *Root) doInsert(n *node) bool {
+	if r.tree == nil {
+		n.parent = nil
+		r.tree = n
 		return true
 	}
-	parent := r.parent
-	var next tree
-	comp := r.compare(key, parent.key)
-	if (comp == 0) {
-		return false
-	} else if (comp < 0) {
-		if !parent.left {
-			n.Position(parent.left)
-			parent.left = &n
-			return true
+	parent := r.tree
+	for true {
+		comp := r.compare(n.key, parent.key)
+		if (comp == 0) {
+			return false
+		} else if (comp < 0) {
+			if parent.left == nil {
+				n.parent = parent.left
+				parent.left = n
+				return true
+			} else {
+				parent = parent.left
+			}
 		} else {
-			parent = parent.left
-		}
-	} else {
-		if !parent.right {
-			n.Position(parent.right)
-			parent.right = &n
-			return true
-		} else {
-			parent = parent.right
+			if parent.right == nil {
+				n.parent = parent.right
+				parent.right = n
+				return true
+			} else {
+				parent = parent.right
+			}
 		}
 	}
+	panic("should not reach here")
 }
 
-func (r *Root) Insert(key interface{}, value interface{}) (bool) {
-	n := new(tree)
+func (root *Root) Insert(key interface{}, value interface{}) (bool) {
+	n := new(node)
 	n.key = key
 	n.value = value
 	n.color = Red
 
-	if r.parent == nil {
-		n.color = black
-		n.Position(r.parent)
-		r.parent = n
-		return true
-	}
-	inserted := r.doInsert(&n)
+	inserted := root.doInsert(n)
 	if !inserted { return false }
 
 	n.color = Red
-	for n != r.tree && n.parent.color == Red {
+	for n != root.tree && n.parent.color == Red {
 		if n.parent == n.parent.parent.left {
 			/* If x's parent is a left, y is x's right 'uncle' */
 			y := n.parent.parent.right;
@@ -96,11 +90,11 @@ func (r *Root) Insert(key interface{}, value interface{}) (bool) {
 					/* and x is to the right */
 					/* case 2 - move x up and rotate */
 					n = n.parent;
-					left_rotate(T, n);
+					root.leftRotate(n);
 				}
 				/* case 3 */
-				n.parent.color = black;
-				n.parent.parent.color = red;
+				n.parent.color = Black;
+				n.parent.parent.color = Red;
 				root.rightRotate(n.parent.parent);
 			}
 		} else {
@@ -109,7 +103,8 @@ func (r *Root) Insert(key interface{}, value interface{}) (bool) {
 		}
 	}
 	/* Color the root black */
-	root.tree.color = black
+	root.tree.color = Black
+	return true
 }
 
 /*
@@ -117,14 +112,14 @@ func (r *Root) Insert(key interface{}, value interface{}) (bool) {
   A   Y	    =>     X   C
      B C 	  A B
 */
-func (root *Root) leftRotate(x node) {
+func (root *Root) leftRotate(x *node) {
 	y := x.right
 	x.right = y.left;
-	if y.left != NULL {
+	if y.left != nil {
 		y.left.parent = x;
 	}
 	y.parent = x.parent;
-	if x.parent == root.tree {
+	if x.parent == nil {
 		root.tree = y;
 	} else {
 		if x.isLeftChild() {
@@ -142,17 +137,17 @@ func (root *Root) leftRotate(x node) {
    X   C  =>   A   Y
   A B             B C
 */
-func (root *Root) rightRotate(y node) {
+func (root *Root) rightRotate(y *node) {
 	x := y.left
 
 	// Move "B"
 	y.left = x.right;
-	if x.right != NULL {
+	if x.right != nil {
 		x.right.parent = y;
 	}
 
 	x.parent = y.parent;
-	if y.parent == root.tree {
+	if y.parent == nil {
 		root.tree = x;
 	} else {
 		if y.isLeftChild() {
