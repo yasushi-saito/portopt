@@ -41,22 +41,17 @@ func TestBasic(t *testing.T) {
 	log.Print("done")
 }
 
-type oracleElement struct {
+type testElement struct {
 	key int
 	value string
 }
 
 type oracle struct {
-	data []oracleElement
-}
-
-type oracleIterator struct {
-	o *oracle
-	index int
+	data []testElement
 }
 
 func newOracle() *oracle {
-	return &oracle{data : make([]oracleElement, 100)}
+	return &oracle{data : make([]testElement, 0)}
 }
 
 func (o *oracle) Len() int {
@@ -79,7 +74,7 @@ func (o *oracle) Insert(key int, value string) bool {
 	}
 
 	n := len(o.data) + 1
-	newData := make([]oracleElement, n)
+	newData := make([]testElement, n)
 	copy(newData, o.data)
 	o.data = newData
 	o.data[n - 1].key = key
@@ -89,7 +84,7 @@ func (o *oracle) Insert(key int, value string) bool {
 }
 
 func (o *oracle) Find(t *testing.T, key int) oracleIterator {
-	prev := oracleElement{key: -1, value: ""}
+	prev := testElement{key: -1, value: ""}
 	for i, e := range o.data {
 		if e.key <= prev.key {
 			t.Fatal("Nonsorted oracle ", e, prev)
@@ -99,6 +94,27 @@ func (o *oracle) Find(t *testing.T, key int) oracleIterator {
 		}
 	}
 	return oracleIterator{o: o, index: len(o.data)}
+}
+
+type oracleIterator struct {
+	o *oracle
+	index int
+}
+
+func (oiter *oracleIterator) Done() bool {
+	return oiter.index >= len(oiter.o.data)
+}
+
+func (oiter *oracleIterator) Key() int {
+	return oiter.o.data[oiter.index].key
+}
+
+func (oiter *oracleIterator) Value() string {
+	return oiter.o.data[oiter.index].value
+}
+
+func (oiter *oracleIterator) Next() {
+	oiter.index++
 }
 
 func TestRandomized(t *testing.T) {
@@ -111,5 +127,24 @@ func TestRandomized(t *testing.T) {
 		log.Print("Insert ", key)
 		o.Insert(key, value)
 		tree.Insert(key, value)
+
+		oiter := o.Find(t, -1)
+		titer := tree.Find(-1)
+		for !oiter.Done() {
+			if titer.Done() {
+				t.Fatal("titer.done")
+			}
+			if titer.Key().(int) != oiter.Key() {
+				t.Fatal(titer.Key(), oiter.Key())
+			}
+			if titer.Value().(string) != oiter.Value() {
+				t.Fatal(titer.Key(), oiter.Key())
+			}
+			oiter.Next()
+			titer.Next()
+		}
+		if !titer.Done() {
+			t.Fatal("!titer.done")
+		}
 	}
 }

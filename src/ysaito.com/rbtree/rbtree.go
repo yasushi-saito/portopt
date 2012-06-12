@@ -87,6 +87,15 @@ func (n *node) isRightChild() bool {
 	return n == n.parent.right
 }
 
+func (n *node) sibling() *node {
+	if n.isLeftChild() {
+		return n.parent.right
+	} else {
+		return n.parent.left
+	}
+	panic("Blah")
+}
+
 func NewTree(compare func(k1, k2 interface{}) int) *Root {
 	r := new(Root)
 	r.compare = compare
@@ -144,8 +153,6 @@ func (root *Root) Find(key interface{}) Iterator {
 		} else if (comp < 0) {
 			if n.left != nil {
 				n = n.left
-			} else if (n.right != nil) {
-				n = n.right
 			} else {
 				return Iterator{node : n}
 			}
@@ -204,12 +211,12 @@ func (root *Root) Insert(key interface{}, value interface{}) (bool) {
 
 		// Case 4: parent is red, uncle is black (1)
 		if n.isRightChild() && n.parent.isLeftChild() {
-			root.leftRotate(n.parent)
+			root.rotateLeft(n.parent)
 			n = n.left
 			continue
 		}
 		if n.isLeftChild() && n.parent.isRightChild() {
-			root.rightRotate(n.parent)
+			root.rotateRight(n.parent)
 			n = n.right
 			continue
 		}
@@ -218,64 +225,120 @@ func (root *Root) Insert(key interface{}, value interface{}) (bool) {
 		n.parent.color = Black
 		grandparent.color = Red
 		if n.isLeftChild() {
-			root.rightRotate(grandparent)
+			root.rotateRight(grandparent)
 		} else {
-			root.leftRotate(grandparent)
+			root.rotateLeft(grandparent)
 		}
 		break
 	}
 	return true
 }
 
-func (root *Root) remove(n *node) {
-	if n.parent == nil {
-		root.tree = nil
-		return
-	}
-	leftChildIsNonLeaf := (n.left != nil && !n.left.isLeaf())
-	rightChildIsNonLeaf := (n.right != nil && !n.right.isLeaf())
+func maxPredecessor(n *node) *node {
 	if n.left == nil {
-		if !rightChildIsNonLeaf {
-			if n.right != nil {
-				n.right.parent := n.parent
-				n.right.color = n.color
-			}
-			if n.isLeftChild() {
-				n.parent.left = n.right
-			} else {
-				n.parent.right = n.right
-			}
-			return
-		} else {
-			// right child is nonleaf. fallthrough
-		}
+		return n
 	}
-
-	if n.right == nil {
-		if !leftChildIsNonLeaf {
-			if n.left != nil {
-				n.left.parent := n.parent
-				n.left.color = n.color
-			}
-			if n.isLeftChild() {
-				n.parent.left = n.left
-			} else {
-				n.parent.right = n.left
-			}
-			return
-		} else {
-			// left child is nonleaf. fallthrough
-		}
+	m := n.left
+	for m.right != nil {
+		m = m.right
 	}
-	assert(n.right && n.left)
+	return m
+}
 
+func (root *Root) Remove(n *node) {
+	root.remove(n)
+}
+
+func (root *Root) remove(toRemove *node) {
+	root.len--
+	max := maxPredecessor(toRemove)
+
+	n := max
 	var child *node
-	if rightChildIsNonLeaf {
-		child = n.right
-	} else {
+	if n.right == nil {
 		child = n.left
+	} else {
+		child = n.right
 	}
 
+	// replace n with child
+	child.parent = n.parent
+	child.left = n.left
+	child.right = n.right
+
+	for true {
+		if n.color != Black {
+			break
+		}
+		if child.color == Red {
+			child.color = Black
+			break
+		}
+		if n.parent == nil {
+			break
+		}
+		s := n.sibling()
+		if s.color == Red {
+			n.parent.color = Red
+			s.color = Black
+			if n.isLeftChild() {
+				root.rotateLeft(n.parent)
+			} else {
+				root.rotateRight(n.parent)
+			}
+			break
+		}
+		if (n.parent.color == Black &&
+			s.color == Black &&
+			s.left.color == Black &&
+			s.right.color == Black) {
+			s.color = Red
+			n = n.parent
+			continue
+		}
+		if (n.parent.color == Red &&
+			s.color == Black &&
+			s.left.color == Black &&
+			s.right.color == Black) {
+			s.color = Red
+			n.parent.color = Black
+			break
+		}
+		if (s.color == Black) {
+			if (n.isLeftChild() &&
+				s.right.color == Black &&
+				s.left.color == Red) {
+				s.color = Red
+				s.left.color = Black
+				root.rotateLeft(s)
+			} else if (n.isRightChild() &&
+				s.left.color == Black &&
+				s.right.color == Red) {
+				s.color = Red
+				s.right.color = Black
+				root.rotateLeft(s)
+			}
+		}
+		s.color = n.parent.color
+		n.parent.color = Black
+		if (n.isLeftChild()) {
+			s.right.color = Black
+			root.rotateLeft(n.parent)
+		} else {
+			s.left.color = Black
+			root.rotateRight(n.parent)
+		}
+		break
+	}
+
+	// replace toDelete with max
+	max.parent = toRemove.parent
+	max.left = toRemove.left
+	max.right = toRemove.right
+	max.color = toRemove.color
+	if max.parent == nil {
+		root.tree = max
+	}
 }
 
 /*
@@ -283,7 +346,7 @@ func (root *Root) remove(n *node) {
   A   Y	    =>     X   C
      B C 	  A B
 */
-func (root *Root) leftRotate(x *node) {
+func (root *Root) rotateLeft(x *node) {
 	y := x.right
 	x.right = y.left;
 	if y.left != nil {
@@ -308,7 +371,7 @@ func (root *Root) leftRotate(x *node) {
    X   C  =>   A   Y
   A B             B C
 */
-func (root *Root) rightRotate(y *node) {
+func (root *Root) rotateRight(y *node) {
 	x := y.left
 
 	// Move "B"
