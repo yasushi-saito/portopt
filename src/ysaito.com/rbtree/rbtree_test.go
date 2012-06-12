@@ -134,6 +134,8 @@ func TestRandomized(t *testing.T) {
 			if titer.Done() {
 				t.Fatal("titer.done")
 			}
+/*			log.Print("oiter: ", oiter.Key())
+			log.Print("titer: ", titer.Key())*/
 			if titer.Key().(int) != oiter.Key() {
 				t.Fatal(titer.Key(), oiter.Key())
 			}

@@ -36,25 +36,26 @@ func (iter *Iterator) Value() interface{} {
 }
 
 func (iter *Iterator) Next() {
-	node := iter.node
+	n := iter.node
 
-	for node != nil {
-		if node.right != nil {
-			node = node.right
-			for node.left != nil {
-				node = node.left
-			}
-			iter.node = node
+	if n.right != nil {
+		iter.node = minSuccessor(n)
+		return
+	}
+
+	for n != nil {
+		p := n.parent
+		if p == nil {
+			iter.node = nil
 			return
 		}
-		for node.right == nil {
-			node = node.parent
-			if node == nil {
-				iter.node = nil
-				return
-			}
+		if n.isLeftChild() {
+			iter.node = p
+			return
 		}
+		n = p
 	}
+
 }
 
 func (iter *Iterator) Prev() {
@@ -241,6 +242,17 @@ func maxPredecessor(n *node) *node {
 	m := n.left
 	for m.right != nil {
 		m = m.right
+	}
+	return m
+}
+
+func minSuccessor(n *node) *node {
+	if n.right == nil {
+		return n
+	}
+	m := n.right
+	for m.left != nil {
+		m = m.left
 	}
 	return m
 }
