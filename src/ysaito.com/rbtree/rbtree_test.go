@@ -3,57 +3,82 @@
 //
 
 package rbtree
+
 import "testing"
-import "fmt"
 import "math/rand"
 import "log"
 import "sort"
 
-type testItem struct {
-	key int
-	value string
-}
+type testItem int
 
-func testKey(k int) testItem {
-	return testItem{k, ""}
-}
-
-func compareInts(i1, i2 Item) int {
-	return i1.(testItem).key - i2.(testItem).key
+func compareItems(i1, i2 Item) int {
+	return int(i1.(testItem)) - int(i2.(testItem))
 }
 
 func TestEmpty(t *testing.T) {
-	tree := NewTree(compareInts)
-	if tree.Len() != 0 { t.Error("Len!=0") }
-	iter := tree.Find(testKey(10))
-	if !iter.Done() { t.Fail() }
+	tree := NewTree(compareItems)
+	if tree.Len() != 0 {
+		t.Error("Len!=0")
+	}
+	iter := tree.Find(testItem(10))
+	if !iter.Done() {
+		t.Fail()
+	}
 }
 
 func TestBasic(t *testing.T) {
-	tree := NewTree(compareInts)
-	if !tree.Insert(testItem{10, "blah"}) {t.Fail()}
-	if tree.Insert(testItem{10, "xxx"}) {t.Fail()}
+	tree := NewTree(compareItems)
+	if !tree.Insert(testItem(10)) {
+		t.Fail()
+	}
+	if tree.Insert(testItem(10)) {
+		t.Fail()
+	}
 
-	if tree.Len() != 1 { t.Error("Len!=1") }
-	iter := tree.Find(testKey(10))
-	if iter.Done() { t.Fail() }
-	if iter.Item().(testItem).key != 10 || iter.Item().(testItem).value != "blah" {
+	if tree.Len() != 1 {
+		t.Error("Len!=1")
+	}
+	iter := tree.Find(testItem(10))
+	if iter.Done() {
+		t.Fail()
+	}
+	if iter.Item().(testItem) != 10 {
 		t.Error("Wrong item: ", iter.Item())
 	}
-	iter = tree.Find(testKey(11))
-	if !iter.Done() { t.Fail() }
+	iter = tree.Find(testItem(11))
+	if !iter.Done() {
+		t.Fail()
+	}
 
-	iter = tree.Find(testKey(9))
-	if iter.Done() { t.Fail() }
+	iter = tree.Find(testItem(9))
+	if iter.Done() {
+		t.Fail()
+	}
 
-	if iter.Item().(testItem).key != 10 || iter.Item().(testItem).value != "blah" {
+	if iter.Item().(testItem) != 10 {
 		t.Error("Wrong item: ", iter.Item())
 	}
 	log.Print("done")
 }
 
-func TestRemove(t *testing.T) {
+func TestDelete(t *testing.T) {
+	tree := NewTree(compareItems)
+	if tree.DeleteWithKey(testItem(10)) {
+		t.Fail()
+	}
+	if tree.Len() != 0 {
+		t.Fail()
+	}
 
+	if !tree.Insert(testItem(10)) {
+		t.Fail()
+	}
+	if !tree.DeleteWithKey(testItem(10)) {
+		t.Fail()
+	}
+	if tree.Len() != 0 {
+		t.Fail()
+	}
 }
 
 type oracle struct {
@@ -61,7 +86,7 @@ type oracle struct {
 }
 
 func newOracle() *oracle {
-	return &oracle{data : make([]testItem, 0)}
+	return &oracle{data: make([]testItem, 0)}
 }
 
 func (o *oracle) Len() int {
@@ -69,7 +94,7 @@ func (o *oracle) Len() int {
 }
 
 func (o *oracle) Less(i, j int) bool {
-	return o.data[i].key < o.data[j].key
+	return o.data[i] < o.data[j]
 }
 
 func (o *oracle) Swap(i, j int) {
@@ -78,36 +103,59 @@ func (o *oracle) Swap(i, j int) {
 	o.data[i] = e
 }
 
-func (o *oracle) Insert(key int, value string) bool {
+func (o *oracle) Insert(key testItem) bool {
 	for _, e := range o.data {
-		if e.key == key { return false }
+		if e == key {
+			return false
+		}
 	}
 
 	n := len(o.data) + 1
 	newData := make([]testItem, n)
 	copy(newData, o.data)
 	o.data = newData
-	o.data[n - 1].key = key
-	o.data[n - 1].value = value
+	o.data[n-1] = key
 	sort.Sort(o)
 	return true
 }
 
-func (o *oracle) Find(t *testing.T, key int) oracleIterator {
-	prev := testItem{key: -1, value: ""}
+func (o *oracle) RandomExistingKey(rand *rand.Rand) testItem {
+	index := rand.Intn(len(o.data))
+	return o.data[index]
+}
+
+func (o *oracle) Find(t *testing.T, key testItem) oracleIterator {
+	prev := testItem(-1)
 	for i, e := range o.data {
-		if e.key <= prev.key {
+		if e <= prev {
 			t.Fatal("Nonsorted oracle ", e, prev)
 		}
-		if e.key >= key {
+		if e >= key {
 			return oracleIterator{o: o, index: i}
 		}
 	}
 	return oracleIterator{o: o, index: len(o.data)}
 }
 
+func (o *oracle) Delete(key testItem) bool {
+	for i, e := range o.data {
+		if e == key {
+			newData := make([]testItem, len(o.data) - 1)
+			copy(newData, o.data[0:i])
+			copy(newData[i:], o.data[i+1:])
+			o.data = newData
+			return true
+		}
+	}
+	return false
+}
+
+
+//
+// Test iterator
+//
 type oracleIterator struct {
-	o *oracle
+	o     *oracle
 	index int
 }
 
@@ -124,37 +172,48 @@ func (oiter oracleIterator) Next() oracleIterator {
 }
 
 func compareContents(t *testing.T, o *oracle, tree *Root) {
-	oiter := o.Find(t, -1)
-	titer := tree.Find(testKey(-1))
+	log.Print("Start compare")
+	oiter := o.Find(t, testItem(-1))
+	titer := tree.Find(testItem(-1))
 	for !oiter.Done() {
 		if titer.Done() {
 			t.Fatal("titer.done")
 		}
-		if titer.Item().(testItem).key != oiter.Item().key {
-			t.Fatal(titer.Item(), oiter.Item())
-		}
-		if titer.Item().(testItem).value != oiter.Item().value {
+		log.Print("Item: ", oiter.Item(), titer.Item())
+		if titer.Item().(testItem) != oiter.Item() {
 			t.Fatal(titer.Item(), oiter.Item())
 		}
 		oiter = oiter.Next()
 		titer = titer.Next()
 	}
 	if !titer.Done() {
+		log.Print("Excess item: ", titer.Item())
 		t.Fatal("!titer.done")
 	}
+	log.Print("End compare")
 }
 
 func TestRandomized(t *testing.T) {
 	o := newOracle()
-	tree := NewTree(compareInts)
+	tree := NewTree(compareItems)
 	r := rand.New(rand.NewSource(0))
 	for i := 0; i < 100; i++ {
-		key := r.Intn(1000)
-		value := fmt.Sprintf("k%d", key)
-		log.Print("Insert ", key)
-		o.Insert(key, value)
-		tree.Insert(testItem{key, value})
+		op := r.Intn(100)
+		if op < 50 {
+			key := r.Intn(1000)
+			log.Print("Insert ", key)
+			o.Insert(testItem(key))
+			tree.Insert(testItem(key))
+			compareContents(t, o, tree)
+		} else if (op < 75 && o.Len() > 0) {
+			key := o.RandomExistingKey(r)
+			log.Print("DeleteExisting ", key)
+			o.Delete(key)
+			if !tree.DeleteWithKey(key) {
+				t.Fatal("DeleteExisting", key)
+			}
+			compareContents(t, o, tree)
+		}
 
-		compareContents(t, o, tree)
 	}
 }

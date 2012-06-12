@@ -3,32 +3,41 @@
 //
 
 package rbtree
+
 const Red = iota
 const Black = 1 + iota
 
-type Item interface {}
+type Item interface{}
 
 // CompareFunc returns 0 if a==b, <0 if a<b, >0 if a>b.
 type CompareFunc func(a, b Item) int
 
 type node struct {
-	item Item
+	item                Item
 	parent, left, right *node
-	color int
+	color               int
 }
 
 type Root struct {
-	tree *node
-	count int
+	tree    *node
+	count   int
 	compare CompareFunc
 }
 
 type Iterator struct {
+	root *Root
 	node *node
 }
 
-func newIterator(n *node) Iterator {
-	return Iterator{node: n}
+func getColor(n *node) int {
+	if n == nil {
+		return Black
+	}
+	return n.color
+}
+
+func newIterator(r *Root, n *node) Iterator {
+	return Iterator{r, n}
 }
 
 func (iter Iterator) Done() bool {
@@ -43,20 +52,20 @@ func (iter Iterator) Next() Iterator {
 	n := iter.node
 
 	if n.right != nil {
-		return newIterator(minSuccessor(n))
+		return newIterator(iter.root, minSuccessor(n))
 	}
 
 	for n != nil {
 		p := n.parent
 		if p == nil {
-			return newIterator(nil)
+			return newIterator(iter.root, nil)
 		}
 		if n.isLeftChild() {
-			return newIterator(p)
+			return newIterator(iter.root, p)
 		}
 		n = p
 	}
-	return newIterator(nil)
+	return newIterator(iter.root, nil)
 }
 
 func (iter *Iterator) Prev() {
@@ -79,6 +88,10 @@ func (iter *Iterator) Prev() {
 			}
 		}
 	}
+}
+
+func (n *node) isLeaf() bool {
+	return n.left == nil && n.right == nil
 }
 
 func (n *node) isLeftChild() bool {
@@ -118,9 +131,9 @@ func (root *Root) doInsert(n *node) bool {
 	parent := root.tree
 	for true {
 		comp := root.compare(n.item, parent.item)
-		if (comp == 0) {
+		if comp == 0 {
 			return false
-		} else if (comp < 0) {
+		} else if comp < 0 {
 			if parent.left == nil {
 				n.parent = parent
 				parent.left = n
@@ -155,22 +168,22 @@ func (root *Root) Find(key Item) Iterator {
 	n := root.tree
 	for true {
 		if n == nil {
-			return newIterator(nil)
+			return newIterator(root, nil)
 		}
 		comp := root.compare(key, n.item)
-		if (comp == 0) {
-			return newIterator(n)
-		} else if (comp < 0) {
+		if comp == 0 {
+			return newIterator(root, n)
+		} else if comp < 0 {
 			if n.left != nil {
 				n = n.left
 			} else {
-				return newIterator(n)
+				return newIterator(root, n)
 			}
 		} else {
 			if n.right != nil {
 				n = n.right
 			} else {
-				return newIterator(n.parent)
+				return newIterator(root, n.parent)
 			}
 		}
 	}
@@ -178,14 +191,16 @@ func (root *Root) Find(key Item) Iterator {
 
 }
 
-func (root *Root) Insert(item Item) (bool) {
+func (root *Root) Insert(item Item) bool {
 	n := new(node)
 	n.item = item
 	n.color = Red
 
 	// TODO: delay creating n until it is found to be inserted
 	inserted := root.doInsert(n)
-	if !inserted { return false }
+	if !inserted {
+		return false
+	}
 
 	n.color = Red
 
@@ -198,7 +213,7 @@ func (root *Root) Insert(item Item) (bool) {
 
 		// Case 2: The parent is black, so the tree already
 		// satisfies the RB properties
-		if (n.parent.color == Black) {
+		if n.parent.color == Black {
 			break
 		}
 
@@ -214,7 +229,7 @@ func (root *Root) Insert(item Item) (bool) {
 		if uncle != nil && uncle.color == Red {
 			n.parent.color = Black
 			uncle.color = Black
-			grandparent.color = Red;
+			grandparent.color = Red
 			n = grandparent
 			continue
 		}
@@ -245,9 +260,6 @@ func (root *Root) Insert(item Item) (bool) {
 }
 
 func maxPredecessor(n *node) *node {
-	if n.left == nil {
-		return n
-	}
 	m := n.left
 	for m.right != nil {
 		m = m.right
@@ -271,7 +283,7 @@ func minSuccessor(n *node) *node {
 func (root *Root) DeleteWithKey(key Item) bool {
 	iter := root.Find(key)
 	if iter.node != nil {
-		root.doDelete(iter.node)
+		root.DeleteWithIterator(iter)
 		return true
 	}
 	return false
@@ -289,26 +301,56 @@ func (root *Root) DeleteWithIterator(iter Iterator) {
 
 func (root *Root) doDelete(toDelete *node) {
 	root.count--
-	max := maxPredecessor(toDelete)
 
-	n := max
-	var child *node
-	if n.right == nil {
-		child = n.left
-	} else {
-		child = n.right
+	// If toDelete is not the minimum node, find its predecessor
+	// (call it pred). We will eventually replace toDelete with
+	// pred. Below, T=toDelete, P=pred
+ 	//
+	//     T            P
+	//   P   R  =>    C   R
+	//     C
+	pred := toDelete
+	if pred.left != nil {
+		pred := maxPredecessor(toDelete)
+		toDelete.item = pred.item
+		// TODO: this will invalidate the iterator.
+		// fix.
 	}
 
-	// replace n with child
-	child.parent = n.parent
-	child.left = n.left
-	child.right = n.right
+	// pred should have at most one child. Replace pred's contents with
+	// the child's.
+	n := pred
+	var child *node
+	if n.right != nil {
+		child := n.right
+		n.item = child.item
+		n.left = child.left
+		n.right = child.right
+	} else if n.left != nil {
+		child = n.left
+		n.item = child.item
+		n.left = child.left
+		n.right = child.right
+	} else {
+		// n is a leaf
+		if n.parent == nil {
+			root.tree = nil
+			return;
+		} else if n.isLeftChild() {
+			n.parent.left = nil
+			child = n.parent.right
+		} else {
+			n.parent.right = nil
+			child = n.parent.left
+		}
+	}
 
+	// Fix the color of the child
 	for true {
 		if n.color != Black {
 			break
 		}
-		if child.color == Red {
+		if child != nil && child.color == Red {
 			child.color = Black
 			break
 		}
@@ -326,32 +368,32 @@ func (root *Root) doDelete(toDelete *node) {
 			}
 			break
 		}
-		if (n.parent.color == Black &&
+		if n.parent.color == Black &&
 			s.color == Black &&
-			s.left.color == Black &&
-			s.right.color == Black) {
+			getColor(s.left) == Black &&
+			getColor(s.right) == Black {
 			s.color = Red
 			n = n.parent
 			continue
 		}
-		if (n.parent.color == Red &&
+		if n.parent.color == Red &&
 			s.color == Black &&
-			s.left.color == Black &&
-			s.right.color == Black) {
+			getColor(s.left) == Black &&
+			getColor(s.right) == Black {
 			s.color = Red
 			n.parent.color = Black
 			break
 		}
-		if (s.color == Black) {
-			if (n.isLeftChild() &&
-				s.right.color == Black &&
-				s.left.color == Red) {
+		if s.color == Black {
+			if n.isLeftChild() &&
+				getColor(s.right) == Black &&
+				getColor(s.left) == Red {
 				s.color = Red
 				s.left.color = Black
 				root.rotateLeft(s)
-			} else if (n.isRightChild() &&
-				s.left.color == Black &&
-				s.right.color == Red) {
+			} else if n.isRightChild() &&
+				getColor(s.left) == Black &&
+				getColor(s.right) == Red {
 				s.color = Red
 				s.right.color = Black
 				root.rotateLeft(s)
@@ -359,7 +401,7 @@ func (root *Root) doDelete(toDelete *node) {
 		}
 		s.color = n.parent.color
 		n.parent.color = Black
-		if (n.isLeftChild()) {
+		if n.isLeftChild() {
 			s.right.color = Black
 			root.rotateLeft(n.parent)
 		} else {
@@ -369,14 +411,6 @@ func (root *Root) doDelete(toDelete *node) {
 		break
 	}
 
-	// replace toDelete with max
-	max.parent = toDelete.parent
-	max.left = toDelete.left
-	max.right = toDelete.right
-	max.color = toDelete.color
-	if max.parent == nil {
-		root.tree = max
-	}
 }
 
 /*
@@ -386,22 +420,22 @@ func (root *Root) doDelete(toDelete *node) {
 */
 func (root *Root) rotateLeft(x *node) {
 	y := x.right
-	x.right = y.left;
+	x.right = y.left
 	if y.left != nil {
-		y.left.parent = x;
+		y.left.parent = x
 	}
-	y.parent = x.parent;
+	y.parent = x.parent
 	if x.parent == nil {
-		root.tree = y;
+		root.tree = y
 	} else {
 		if x.isLeftChild() {
-			x.parent.left = y;
+			x.parent.left = y
 		} else {
-			x.parent.right = y;
+			x.parent.right = y
 		}
 	}
-	y.left = x;
-	x.parent = y;
+	y.left = x
+	x.parent = y
 }
 
 /*
@@ -413,21 +447,21 @@ func (root *Root) rotateRight(y *node) {
 	x := y.left
 
 	// Move "B"
-	y.left = x.right;
+	y.left = x.right
 	if x.right != nil {
-		x.right.parent = y;
+		x.right.parent = y
 	}
 
-	x.parent = y.parent;
+	x.parent = y.parent
 	if y.parent == nil {
-		root.tree = x;
+		root.tree = x
 	} else {
 		if y.isLeftChild() {
-			y.parent.left = x;
+			y.parent.left = x
 		} else {
-			y.parent.right = x;
+			y.parent.right = x
 		}
 	}
-	x.right = y;
-	y.parent = x;
+	x.right = y
+	y.parent = x
 }
