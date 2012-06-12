@@ -9,49 +9,59 @@ import "math/rand"
 import "log"
 import "sort"
 
-func compareInts(i1, i2 interface{}) int {
-	return i1.(int) - i2.(int)
+type testItem struct {
+	key int
+	value string
+}
+
+func testKey(k int) testItem {
+	return testItem{k, ""}
+}
+
+func compareInts(i1, i2 Item) int {
+	return i1.(testItem).key - i2.(testItem).key
 }
 
 func TestEmpty(t *testing.T) {
 	tree := NewTree(compareInts)
 	if tree.Len() != 0 { t.Error("Len!=0") }
-	iter := tree.Find(10)
+	iter := tree.Find(testKey(10))
 	if !iter.Done() { t.Fail() }
 }
 
 func TestBasic(t *testing.T) {
 	tree := NewTree(compareInts)
-	if !tree.Insert(10, "blah") {t.Fail()}
-	if tree.Insert(10, "xxx") {t.Fail()}
+	if !tree.Insert(testItem{10, "blah"}) {t.Fail()}
+	if tree.Insert(testItem{10, "xxx"}) {t.Fail()}
 
 	if tree.Len() != 1 { t.Error("Len!=1") }
-	iter := tree.Find(10)
+	iter := tree.Find(testKey(10))
 	if iter.Done() { t.Fail() }
-	if iter.Key().(int) != 10 { t.Error("Wrong key: ", iter.Key()) }
-	if iter.Value().(string) != "blah" { t.Error("Wrong value: ", iter.Value()) }
-
-	iter = tree.Find(11)
+	if iter.Item().(testItem).key != 10 || iter.Item().(testItem).value != "blah" {
+		t.Error("Wrong item: ", iter.Item())
+	}
+	iter = tree.Find(testKey(11))
 	if !iter.Done() { t.Fail() }
 
-	iter = tree.Find(9)
+	iter = tree.Find(testKey(9))
 	if iter.Done() { t.Fail() }
-	if iter.Key().(int) != 10 { t.Error("Wrong key: ", iter.Key()) }
-	if iter.Value().(string) != "blah" { t.Error("Wrong value: ", iter.Value()) }
+
+	if iter.Item().(testItem).key != 10 || iter.Item().(testItem).value != "blah" {
+		t.Error("Wrong item: ", iter.Item())
+	}
 	log.Print("done")
 }
 
-type testElement struct {
-	key int
-	value string
+func TestRemove(t *testing.T) {
+
 }
 
 type oracle struct {
-	data []testElement
+	data []testItem
 }
 
 func newOracle() *oracle {
-	return &oracle{data : make([]testElement, 0)}
+	return &oracle{data : make([]testItem, 0)}
 }
 
 func (o *oracle) Len() int {
@@ -74,7 +84,7 @@ func (o *oracle) Insert(key int, value string) bool {
 	}
 
 	n := len(o.data) + 1
-	newData := make([]testElement, n)
+	newData := make([]testItem, n)
 	copy(newData, o.data)
 	o.data = newData
 	o.data[n - 1].key = key
@@ -84,7 +94,7 @@ func (o *oracle) Insert(key int, value string) bool {
 }
 
 func (o *oracle) Find(t *testing.T, key int) oracleIterator {
-	prev := testElement{key: -1, value: ""}
+	prev := testItem{key: -1, value: ""}
 	for i, e := range o.data {
 		if e.key <= prev.key {
 			t.Fatal("Nonsorted oracle ", e, prev)
@@ -101,20 +111,37 @@ type oracleIterator struct {
 	index int
 }
 
-func (oiter *oracleIterator) Done() bool {
+func (oiter oracleIterator) Done() bool {
 	return oiter.index >= len(oiter.o.data)
 }
 
-func (oiter *oracleIterator) Key() int {
-	return oiter.o.data[oiter.index].key
+func (oiter oracleIterator) Item() testItem {
+	return oiter.o.data[oiter.index]
 }
 
-func (oiter *oracleIterator) Value() string {
-	return oiter.o.data[oiter.index].value
+func (oiter oracleIterator) Next() oracleIterator {
+	return oracleIterator{oiter.o, oiter.index + 1}
 }
 
-func (oiter *oracleIterator) Next() {
-	oiter.index++
+func compareContents(t *testing.T, o *oracle, tree *Root) {
+	oiter := o.Find(t, -1)
+	titer := tree.Find(testKey(-1))
+	for !oiter.Done() {
+		if titer.Done() {
+			t.Fatal("titer.done")
+		}
+		if titer.Item().(testItem).key != oiter.Item().key {
+			t.Fatal(titer.Item(), oiter.Item())
+		}
+		if titer.Item().(testItem).value != oiter.Item().value {
+			t.Fatal(titer.Item(), oiter.Item())
+		}
+		oiter = oiter.Next()
+		titer = titer.Next()
+	}
+	if !titer.Done() {
+		t.Fatal("!titer.done")
+	}
 }
 
 func TestRandomized(t *testing.T) {
@@ -126,27 +153,8 @@ func TestRandomized(t *testing.T) {
 		value := fmt.Sprintf("k%d", key)
 		log.Print("Insert ", key)
 		o.Insert(key, value)
-		tree.Insert(key, value)
+		tree.Insert(testItem{key, value})
 
-		oiter := o.Find(t, -1)
-		titer := tree.Find(-1)
-		for !oiter.Done() {
-			if titer.Done() {
-				t.Fatal("titer.done")
-			}
-/*			log.Print("oiter: ", oiter.Key())
-			log.Print("titer: ", titer.Key())*/
-			if titer.Key().(int) != oiter.Key() {
-				t.Fatal(titer.Key(), oiter.Key())
-			}
-			if titer.Value().(string) != oiter.Value() {
-				t.Fatal(titer.Key(), oiter.Key())
-			}
-			oiter.Next()
-			titer.Next()
-		}
-		if !titer.Done() {
-			t.Fatal("!titer.done")
-		}
+		compareContents(t, o, tree)
 	}
 }

@@ -6,56 +6,57 @@ package rbtree
 const Red = iota
 const Black = 1 + iota
 
+type Item interface {}
+
+// CompareFunc returns 0 if a==b, <0 if a<b, >0 if a>b.
+type CompareFunc func(a, b Item) int
+
 type node struct {
-	key interface{}
-	value interface{}
+	item Item
 	parent, left, right *node
 	color int
 }
 
 type Root struct {
 	tree *node
-	len int
-	compare func(k1, k2 interface{}) int
+	count int
+	compare CompareFunc
 }
 
 type Iterator struct {
 	node *node
 }
 
-func (iter *Iterator) Done() bool {
+func newIterator(n *node) Iterator {
+	return Iterator{node: n}
+}
+
+func (iter Iterator) Done() bool {
 	return iter.node == nil
 }
 
-func (iter *Iterator) Key() interface{} {
-	return iter.node.key
+func (iter Iterator) Item() interface{} {
+	return iter.node.item
 }
 
-func (iter *Iterator) Value() interface{} {
-	return iter.node.value
-}
-
-func (iter *Iterator) Next() {
+func (iter Iterator) Next() Iterator {
 	n := iter.node
 
 	if n.right != nil {
-		iter.node = minSuccessor(n)
-		return
+		return newIterator(minSuccessor(n))
 	}
 
 	for n != nil {
 		p := n.parent
 		if p == nil {
-			iter.node = nil
-			return
+			return newIterator(nil)
 		}
 		if n.isLeftChild() {
-			iter.node = p
-			return
+			return newIterator(p)
 		}
 		n = p
 	}
-
+	return newIterator(nil)
 }
 
 func (iter *Iterator) Prev() {
@@ -97,33 +98,33 @@ func (n *node) sibling() *node {
 	panic("Blah")
 }
 
-func NewTree(compare func(k1, k2 interface{}) int) *Root {
+func NewTree(compare CompareFunc) *Root {
 	r := new(Root)
 	r.compare = compare
 	return r
 }
 
 func (root *Root) Len() int {
-	return root.len
+	return root.count
 }
 
 func (root *Root) doInsert(n *node) bool {
 	if root.tree == nil {
 		n.parent = nil
 		root.tree = n
-		root.len++
+		root.count++
 		return true
 	}
 	parent := root.tree
 	for true {
-		comp := root.compare(n.key, parent.key)
+		comp := root.compare(n.item, parent.item)
 		if (comp == 0) {
 			return false
 		} else if (comp < 0) {
 			if parent.left == nil {
 				n.parent = parent
 				parent.left = n
-				root.len++
+				root.count++
 				return true
 			} else {
 				parent = parent.left
@@ -132,7 +133,7 @@ func (root *Root) doInsert(n *node) bool {
 			if parent.right == nil {
 				n.parent = parent
 				parent.right = n
-				root.len++
+				root.count++
 				return true
 			} else {
 				parent = parent.right
@@ -142,26 +143,34 @@ func (root *Root) doInsert(n *node) bool {
 	panic("should not reach here")
 }
 
-func (root *Root) Find(key interface{}) Iterator {
+func (root *Root) Get(key Item) Item {
+	iter := root.Find(key)
+	if iter.node != nil && root.compare(key, iter.node.item) == 0 {
+		return iter.node.item
+	}
+	return nil
+}
+
+func (root *Root) Find(key Item) Iterator {
 	n := root.tree
 	for true {
 		if n == nil {
-			return Iterator{node : nil}
+			return newIterator(nil)
 		}
-		comp := root.compare(key, n.key)
+		comp := root.compare(key, n.item)
 		if (comp == 0) {
-			return Iterator{node : n}
+			return newIterator(n)
 		} else if (comp < 0) {
 			if n.left != nil {
 				n = n.left
 			} else {
-				return Iterator{node : n}
+				return newIterator(n)
 			}
 		} else {
 			if n.right != nil {
 				n = n.right
 			} else {
-				return Iterator{node : n.parent}
+				return newIterator(n.parent)
 			}
 		}
 	}
@@ -169,12 +178,12 @@ func (root *Root) Find(key interface{}) Iterator {
 
 }
 
-func (root *Root) Insert(key interface{}, value interface{}) (bool) {
+func (root *Root) Insert(item Item) (bool) {
 	n := new(node)
-	n.key = key
-	n.value = value
+	n.item = item
 	n.color = Red
 
+	// TODO: delay creating n until it is found to be inserted
 	inserted := root.doInsert(n)
 	if !inserted { return false }
 
@@ -257,13 +266,30 @@ func minSuccessor(n *node) *node {
 	return m
 }
 
-func (root *Root) Remove(n *node) {
-	root.remove(n)
+// Delete an item with the given key. Return true iff the item was
+// found.
+func (root *Root) DeleteWithKey(key Item) bool {
+	iter := root.Find(key)
+	if iter.node != nil {
+		root.doDelete(iter.node)
+		return true
+	}
+	return false
 }
 
-func (root *Root) remove(toRemove *node) {
-	root.len--
-	max := maxPredecessor(toRemove)
+// Delete the current item.
+//
+// REQUIRES: !iter.Done()
+func (root *Root) DeleteWithIterator(iter Iterator) {
+	root.doDelete(iter.node)
+
+	// Invalidate the node just to be sure
+	iter.node.item = nil
+}
+
+func (root *Root) doDelete(toDelete *node) {
+	root.count--
+	max := maxPredecessor(toDelete)
 
 	n := max
 	var child *node
@@ -344,10 +370,10 @@ func (root *Root) remove(toRemove *node) {
 	}
 
 	// replace toDelete with max
-	max.parent = toRemove.parent
-	max.left = toRemove.left
-	max.right = toRemove.right
-	max.color = toRemove.color
+	max.parent = toDelete.parent
+	max.left = toDelete.left
+	max.right = toDelete.right
+	max.color = toDelete.color
 	if max.parent == nil {
 		root.tree = max
 	}
