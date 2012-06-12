@@ -111,7 +111,7 @@ func (root *Root) doInsert(n *node) bool {
 			return false
 		} else if (comp < 0) {
 			if parent.left == nil {
-				n.parent = parent.left
+				n.parent = parent
 				parent.left = n
 				root.len++
 				return true
@@ -120,7 +120,7 @@ func (root *Root) doInsert(n *node) bool {
 			}
 		} else {
 			if parent.right == nil {
-				n.parent = parent.right
+				n.parent = parent
 				parent.right = n
 				root.len++
 				return true
@@ -171,37 +171,111 @@ func (root *Root) Insert(key interface{}, value interface{}) (bool) {
 	if !inserted { return false }
 
 	n.color = Red
-	for n != root.tree && n.parent.color == Red {
-		if n.parent == n.parent.parent.left {
-			/* If x's parent is a left, y is x's right 'uncle' */
-			y := n.parent.parent.right;
-			if y.color == Red {
-				/* case 1 - change the colors */
-				n.parent.color = Black;
-				y.color = Black;
-				n.parent.parent.color = Red;
-				/* Move x up the tree */
-				n = n.parent.parent;
-			} else {
-				if n == n.parent.right {
-					/* and x is to the right */
-					/* case 2 - move x up and rotate */
-					n = n.parent;
-					root.leftRotate(n);
-				}
-				/* case 3 */
-				n.parent.color = Black;
-				n.parent.parent.color = Red;
-				root.rightRotate(n.parent.parent);
-			}
+
+	for true {
+		// Case 1: N is at the root
+		if n.parent == nil {
+			n.color = Black
+			break
+		}
+
+		// Case 2: The parent is black, so the tree already
+		// satisfies the RB properties
+		if (n.parent.color == Black) {
+			break
+		}
+
+		// Case 3: parent and uncle are both red.
+		// Then paint both black and make grandparent red.
+		grandparent := n.parent.parent
+		var uncle *node
+		if n.parent.isLeftChild() {
+			uncle = grandparent.right
 		} else {
-			/* repeat the "if" part with right and left
-			 exchanged */
+			uncle = grandparent.left
+		}
+		if uncle != nil && uncle.color == Red {
+			n.parent.color = Black
+			uncle.color = Black
+			grandparent.color = Red;
+			n = grandparent
+			continue
+		}
+
+		// Case 4: parent is red, uncle is black (1)
+		if n.isRightChild() && n.parent.isLeftChild() {
+			root.leftRotate(n.parent)
+			n = n.left
+			continue
+		}
+		if n.isLeftChild() && n.parent.isRightChild() {
+			root.rightRotate(n.parent)
+			n = n.right
+			continue
+		}
+
+		// Case 5: parent is read, uncle is black (2)
+		n.parent.color = Black
+		grandparent.color = Red
+		if n.isLeftChild() {
+			root.rightRotate(grandparent)
+		} else {
+			root.leftRotate(grandparent)
+		}
+		break
+	}
+	return true
+}
+
+func (root *Root) remove(n *node) {
+	if n.parent == nil {
+		root.tree = nil
+		return
+	}
+	leftChildIsNonLeaf := (n.left != nil && !n.left.isLeaf())
+	rightChildIsNonLeaf := (n.right != nil && !n.right.isLeaf())
+	if n.left == nil {
+		if !rightChildIsNonLeaf {
+			if n.right != nil {
+				n.right.parent := n.parent
+				n.right.color = n.color
+			}
+			if n.isLeftChild() {
+				n.parent.left = n.right
+			} else {
+				n.parent.right = n.right
+			}
+			return
+		} else {
+			// right child is nonleaf. fallthrough
 		}
 	}
-	/* Color the root black */
-	root.tree.color = Black
-	return true
+
+	if n.right == nil {
+		if !leftChildIsNonLeaf {
+			if n.left != nil {
+				n.left.parent := n.parent
+				n.left.color = n.color
+			}
+			if n.isLeftChild() {
+				n.parent.left = n.left
+			} else {
+				n.parent.right = n.left
+			}
+			return
+		} else {
+			// left child is nonleaf. fallthrough
+		}
+	}
+	assert(n.right && n.left)
+
+	var child *node
+	if rightChildIsNonLeaf {
+		child = n.right
+	} else {
+		child = n.left
+	}
+
 }
 
 /*
