@@ -20,7 +20,7 @@ func TestEmpty(t *testing.T) {
 	if tree.Len() != 0 {
 		t.Error("Len!=0")
 	}
-	iter := tree.Find(testItem(10))
+	iter := tree.FindGE(testItem(10))
 	if !iter.Done() {
 		t.Error("Not empty")
 	}
@@ -38,19 +38,19 @@ func TestBasic(t *testing.T) {
 	if tree.Len() != 1 {
 		t.Error("Len!=1")
 	}
-	iter := tree.Find(testItem(10))
+	iter := tree.FindGE(testItem(10))
 	if iter.Done() {
 		t.Error()
 	}
 	if iter.Item().(testItem) != 10 {
 		t.Error("Wrong item: ", iter.Item())
 	}
-	iter = tree.Find(testItem(11))
+	iter = tree.FindGE(testItem(11))
 	if !iter.Done() {
 		t.Error()
 	}
 
-	iter = tree.Find(testItem(9))
+	iter = tree.FindGE(testItem(9))
 	if iter.Done() {
 		t.Error()
 	}
@@ -173,7 +173,7 @@ func (oiter oracleIterator) Next() oracleIterator {
 
 func compareContents(t *testing.T, o *oracle, tree *Root) {
 	oiter := o.Find(t, testItem(-1))
-	titer := tree.Find(testItem(-1))
+	titer := tree.FindGE(testItem(-1))
 	for !oiter.Done() {
 		if titer.Done() {
 			t.Fatal("titer.done")

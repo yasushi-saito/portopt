@@ -29,13 +29,6 @@ type Iterator struct {
 	node *node
 }
 
-func getColor(n *node) int {
-	if n == nil {
-		return Black
-	}
-	return n.color
-}
-
 func newIterator(r *Root, n *node) Iterator {
 	return Iterator{r, n}
 }
@@ -48,46 +41,55 @@ func (iter Iterator) Item() interface{} {
 	return iter.node.item
 }
 
-func (iter Iterator) Next() Iterator {
-	n := iter.node
-
+func (n *node) next() *node {
 	if n.right != nil {
-		return newIterator(iter.root, minSuccessor(n))
+		return minSuccessor(n)
 	}
 
 	for n != nil {
 		p := n.parent
 		if p == nil {
-			return newIterator(iter.root, nil)
+			return nil
 		}
 		if n.isLeftChild() {
-			return newIterator(iter.root, p)
+			return p
 		}
 		n = p
 	}
-	return newIterator(iter.root, nil)
+	return nil
 }
 
-func (iter *Iterator) Prev() {
-	node := iter.node
-
-	for node != nil {
-		if node.left != nil {
-			node = node.left
-			for node.right != nil {
-				node = node.right
-			}
-			iter.node = node
-			return
-		}
-		for node.left == nil {
-			node = node.parent
-			if node == nil {
-				iter.node = nil
-				return
-			}
-		}
+func (n *node) prev() *node {
+	if n.left != nil {
+		return maxPredecessor(n)
 	}
+
+	for n != nil {
+		p := n.parent
+		if p == nil {
+			return nil
+		}
+		if n.isRightChild() {
+			return p
+		}
+		n = p
+	}
+	return nil
+}
+
+func (iter Iterator) Next() Iterator {
+	return Iterator{iter.root, iter.node.next()}
+}
+
+func (iter Iterator) Prev() Iterator {
+	return Iterator{iter.root, iter.node.prev()}
+}
+
+func getColor(n *node) int {
+	if n == nil {
+		return Black
+	}
+	return n.color
 }
 
 func (n *node) isLeftChild() bool {
@@ -102,10 +104,8 @@ func (n *node) sibling() *node {
 	doAssert(n.parent != nil)
 	if n.isLeftChild() {
 		return n.parent.right
-	} else {
-		return n.parent.left
 	}
-	panic("Blah")
+	return n.parent.left
 }
 
 func NewTree(compare CompareFunc) *Root {
@@ -154,14 +154,14 @@ func (root *Root) doInsert(n *node) bool {
 }
 
 func (root *Root) Get(key Item) Item {
-	iter := root.Find(key)
+	iter := root.FindGE(key)
 	if iter.node != nil && root.compare(key, iter.node.item) == 0 {
 		return iter.node.item
 	}
 	return nil
 }
 
-func (root *Root) Find(key Item) Iterator {
+func (root *Root) FindGE(key Item) Iterator {
 	n := root.tree
 	for true {
 		if n == nil {
@@ -185,7 +185,30 @@ func (root *Root) Find(key Item) Iterator {
 		}
 	}
 	panic("should not reach here")
+}
 
+func (root *Root) findGE(key Item) *node {
+	n := root.tree
+	for true {
+		if n == nil {
+			return nil
+		}
+		comp := root.compare(key, n.item)
+		if comp == 0 {
+			return n
+		} else if comp < 0 {
+			if n.left != nil {
+				n = n.left
+			} else {
+				return n
+			}
+		} else {
+			succ := n.next()
+			doAssert(succ == nil || root.compare(key, succ) < 0)
+			return succ
+		}
+	}
+	panic("should not reach here")
 }
 
 func (root *Root) Insert(item Item) bool {
@@ -257,6 +280,9 @@ func (root *Root) Insert(item Item) bool {
 }
 
 func maxPredecessor(n *node) *node {
+	if n.left == nil {
+		return n
+	}
 	m := n.left
 	for m.right != nil {
 		m = m.right
@@ -278,7 +304,7 @@ func minSuccessor(n *node) *node {
 // Delete an item with the given key. Return true iff the item was
 // found.
 func (root *Root) DeleteWithKey(key Item) bool {
-	iter := root.Find(key)
+	iter := root.FindGE(key)
 	if iter.node != nil {
 		root.DeleteWithIterator(iter)
 		return true
