@@ -322,37 +322,38 @@ func (root *Root) doDelete(n *node) {
 }
 
 func (root* Root) deleteCase1(n *node) {
-	if (n.parent != nil) {
-		if (getColor(n.sibling()) == Red) {
-			n.parent.color = Red;
-			n.sibling().color = Black;
-			if (n == n.parent.left) {
-				root.rotateLeft(n.parent);
+	for true {
+		if (n.parent != nil) {
+			if (getColor(n.sibling()) == Red) {
+				n.parent.color = Red;
+				n.sibling().color = Black;
+				if (n == n.parent.left) {
+					root.rotateLeft(n.parent);
+				} else {
+					root.rotateRight(n.parent);
+				}
+			}
+			if (getColor(n.parent) == Black &&
+				getColor(n.sibling()) == Black &&
+				getColor(n.sibling().left) == Black &&
+				getColor(n.sibling().right) == Black) {
+				n.sibling().color = Red;
+				n = n.parent
+				continue
 			} else {
-				root.rotateRight(n.parent);
+				// case 4
+				if (getColor(n.parent) == Red &&
+					getColor(n.sibling()) == Black &&
+					getColor(n.sibling().left) == Black &&
+					getColor(n.sibling().right) == Black) {
+					n.sibling().color = Red;
+					n.parent.color = Black;
+				} else {
+					root.deleteCase5(n);
+				}
 			}
 		}
-		if (getColor(n.parent) == Black &&
-			getColor(n.sibling()) == Black &&
-			getColor(n.sibling().left) == Black &&
-			getColor(n.sibling().right) == Black) {
-			n.sibling().color = Red;
-			root.deleteCase1(n.parent);
-		} else {
-			root.deleteCase4(n);
-		}
-	}
-}
-
-func (root* Root) deleteCase4(n *node) {
-	if (getColor(n.parent) == Red &&
-		getColor(n.sibling()) == Black &&
-		getColor(n.sibling().left) == Black &&
-		getColor(n.sibling().right) == Black) {
-		n.sibling().color = Red;
-		n.parent.color = Black;
-	} else {
-		root.deleteCase5(n);
+		break
 	}
 }
 
@@ -372,10 +373,8 @@ func (root* Root) deleteCase5(n *node) {
 		n.sibling().right.color = Black;
 		root.rotateLeft(n.sibling());
 	}
-	root.deleteCase6(n);
-}
 
-func (root* Root) deleteCase6(n *node) {
+	// case 6
 	n.sibling().color = getColor(n.parent);
 	n.parent.color = Black;
 	if (n == n.parent.left) {
