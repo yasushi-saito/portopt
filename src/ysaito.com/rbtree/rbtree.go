@@ -290,7 +290,7 @@ func (root *Root) DeleteWithKey(key Item) bool {
 //
 // REQUIRES: !iter.Done()
 func (root *Root) DeleteWithIterator(iter Iterator) {
-	root.doDelete3(iter.node)
+	root.doDelete(iter.node)
 }
 
 func doAssert(b bool) {
@@ -299,7 +299,7 @@ func doAssert(b bool) {
 	}
 }
 
-func (root *Root) doDelete3(n *node) {
+func (root *Root) doDelete(n *node) {
 	root.count--
 	if n.left != nil && n.right != nil {
 		pred := maxPredecessor(n)
@@ -325,21 +325,17 @@ func (root* Root) deleteCase1(n *node) {
 	if (n.parent == nil) {
 		return
 	} else {
-		root.deleteCase2(n)
-	}
-}
-
-func (root* Root) deleteCase2(n *node) {
-	if (getColor(n.sibling()) == Red) {
-		n.parent.color = Red;
-		n.sibling().color = Black;
-		if (n == n.parent.left) {
-			root.rotateLeft(n.parent);
-		} else {
-			root.rotateRight(n.parent);
+		if (getColor(n.sibling()) == Red) {
+			n.parent.color = Red;
+			n.sibling().color = Black;
+			if (n == n.parent.left) {
+				root.rotateLeft(n.parent);
+			} else {
+				root.rotateRight(n.parent);
+			}
 		}
+		root.deleteCase3(n)
 	}
-	root.deleteCase3(n)
 }
 
 func (root* Root) deleteCase3(n *node) {
