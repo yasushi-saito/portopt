@@ -74,6 +74,8 @@ func (root *Root) FindLE(key Item) Iterator {
 	return Iterator{n}
 }
 
+// Insert an item. If the item is already in the tree, do nothing and
+// return false. Else return true.
 func (root *Root) Insert(item Item) bool {
 	n := new(node)
 	n.item = item
