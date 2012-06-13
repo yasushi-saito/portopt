@@ -172,14 +172,13 @@ func (oiter oracleIterator) Next() oracleIterator {
 }
 
 func compareContents(t *testing.T, o *oracle, tree *Root) {
-	log.Print("Start compare")
 	oiter := o.Find(t, testItem(-1))
 	titer := tree.Find(testItem(-1))
 	for !oiter.Done() {
 		if titer.Done() {
 			t.Fatal("titer.done")
 		}
-		log.Print("Item: ", oiter.Item(), titer.Item())
+		// log.Print("Item: ", oiter.Item(), titer.Item())
 		if titer.Item().(testItem) != oiter.Item() {
 			t.Fatal(titer.Item(), oiter.Item())
 		}
@@ -190,24 +189,25 @@ func compareContents(t *testing.T, o *oracle, tree *Root) {
 		log.Print("Excess item: ", titer.Item())
 		t.Fatal("!titer.done")
 	}
-	log.Print("End compare")
 }
+
+const testVerbose = false
 
 func TestRandomized(t *testing.T) {
 	o := newOracle()
 	tree := NewTree(compareItems)
 	r := rand.New(rand.NewSource(0))
-	for i := 0; i < 100; i++ {
+	for i := 0; i < 10000; i++ {
 		op := r.Intn(100)
 		if op < 50 {
-			key := r.Intn(1000)
-			log.Print("Insert ", key)
+			key := r.Intn(2000)
+			if testVerbose { log.Print("Insert ", key) }
 			o.Insert(testItem(key))
 			tree.Insert(testItem(key))
 			compareContents(t, o, tree)
-		} else if (op < 75 && o.Len() > 0) {
+		} else if o.Len() > 0 {
 			key := o.RandomExistingKey(r)
-			log.Print("DeleteExisting ", key)
+			if testVerbose { log.Print("DeleteExisting ", key) }
 			o.Delete(key)
 			if !tree.DeleteWithKey(key) {
 				t.Fatal("DeleteExisting", key)
