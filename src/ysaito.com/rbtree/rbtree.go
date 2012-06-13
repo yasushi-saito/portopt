@@ -322,9 +322,7 @@ func (root *Root) doDelete(n *node) {
 }
 
 func (root* Root) deleteCase1(n *node) {
-	if (n.parent == nil) {
-		return
-	} else {
+	if (n.parent != nil) {
 		if (getColor(n.sibling()) == Red) {
 			n.parent.color = Red;
 			n.sibling().color = Black;
@@ -334,19 +332,15 @@ func (root* Root) deleteCase1(n *node) {
 				root.rotateRight(n.parent);
 			}
 		}
-		root.deleteCase3(n)
-	}
-}
-
-func (root* Root) deleteCase3(n *node) {
-	if (getColor(n.parent) == Black &&
-		getColor(n.sibling()) == Black &&
-		getColor(n.sibling().left) == Black &&
-		getColor(n.sibling().right) == Black) {
-		n.sibling().color = Red;
-		root.deleteCase1(n.parent);
-	} else {
-		root.deleteCase4(n);
+		if (getColor(n.parent) == Black &&
+			getColor(n.sibling()) == Black &&
+			getColor(n.sibling().left) == Black &&
+			getColor(n.sibling().right) == Black) {
+			n.sibling().color = Red;
+			root.deleteCase1(n.parent);
+		} else {
+			root.deleteCase4(n);
+		}
 	}
 }
 
