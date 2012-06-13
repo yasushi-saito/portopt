@@ -433,11 +433,76 @@ func (root *Tree) doDelete(n *node) {
 	}
 
 	root.count--
+/*
 	if n.left != nil && n.right != nil {
 		pred := maxPredecessor(n)
 		n.item = pred.item
 		n = pred
 	}
+*/
+
+	if n.left != nil && n.right != nil {
+		pred := maxPredecessor(n)
+		doAssert(pred != n)
+		isLeft := pred.isLeftChild()
+		tmp := *pred
+		root.replaceNode(n, pred)
+		pred.color = n.color
+
+		if (tmp.parent == n) {
+			// swap the positions of n and pred
+			if isLeft {
+				pred.left = n
+				pred.right = n.right
+				if pred.right != nil {
+					pred.right.parent = pred
+				}
+			} else {
+				pred.left = n.left
+				if pred.left != nil {
+					pred.left.parent = pred
+				}
+				pred.right = n
+			}
+			n.item = tmp.item
+			n.parent = pred
+
+			n.left = tmp.left
+			if n.left != nil {
+				n.left.parent = n
+			}
+			n.right = tmp.right
+			if n.right != nil {
+				n.right.parent = n
+			}
+		} else {
+			pred.left = n.left
+			if pred.left != nil {
+				pred.left.parent = pred
+			}
+			pred.right = n.right
+			if pred.right != nil {
+				pred.right.parent = pred
+			}
+			if isLeft {
+				tmp.parent.left = n
+			} else {
+				tmp.parent.right = n
+			}
+			n.item = tmp.item
+			n.parent = tmp.parent
+			n.left = tmp.left
+			if n.left != nil {
+				n.left.parent = n
+			}
+			n.right = tmp.right
+			if n.right != nil {
+				n.right.parent = n
+			}
+		}
+		n.color = tmp.color
+	}
+
 	doAssert(n.left == nil || n.right == nil)
 	child := n.right
 	if child == nil {
