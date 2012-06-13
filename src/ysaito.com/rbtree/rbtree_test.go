@@ -22,17 +22,17 @@ func TestEmpty(t *testing.T) {
 	}
 	iter := tree.Find(testItem(10))
 	if !iter.Done() {
-		t.Fail()
+		t.Error("Not empty")
 	}
 }
 
 func TestBasic(t *testing.T) {
 	tree := NewTree(compareItems)
 	if !tree.Insert(testItem(10)) {
-		t.Fail()
+		t.Error("Insert1")
 	}
 	if tree.Insert(testItem(10)) {
-		t.Fail()
+		t.Error("Insert2")
 	}
 
 	if tree.Len() != 1 {
@@ -40,19 +40,19 @@ func TestBasic(t *testing.T) {
 	}
 	iter := tree.Find(testItem(10))
 	if iter.Done() {
-		t.Fail()
+		t.Error()
 	}
 	if iter.Item().(testItem) != 10 {
 		t.Error("Wrong item: ", iter.Item())
 	}
 	iter = tree.Find(testItem(11))
 	if !iter.Done() {
-		t.Fail()
+		t.Error()
 	}
 
 	iter = tree.Find(testItem(9))
 	if iter.Done() {
-		t.Fail()
+		t.Error()
 	}
 
 	if iter.Item().(testItem) != 10 {
@@ -64,20 +64,20 @@ func TestBasic(t *testing.T) {
 func TestDelete(t *testing.T) {
 	tree := NewTree(compareItems)
 	if tree.DeleteWithKey(testItem(10)) {
-		t.Fail()
+		t.Error()
 	}
 	if tree.Len() != 0 {
-		t.Fail()
+		t.Error()
 	}
 
 	if !tree.Insert(testItem(10)) {
-		t.Fail()
+		t.Error()
 	}
 	if !tree.DeleteWithKey(testItem(10)) {
-		t.Fail()
+		t.Error()
 	}
 	if tree.Len() != 0 {
-		t.Fail()
+		t.Error()
 	}
 }
 
