@@ -90,24 +90,12 @@ func (iter *Iterator) Prev() {
 	}
 }
 
-func (n *node) isLeaf() bool {
-	return n.left == nil && n.right == nil
-}
-
 func (n *node) isLeftChild() bool {
 	return n == n.parent.left
 }
 
 func (n *node) isRightChild() bool {
 	return n == n.parent.right
-}
-
-func sibling(parent, child *node) *node {
-	doAssert(child == nil || child.parent == parent)
-	if parent.left == child {
-		return parent.right
-	}
-	return parent.left
 }
 
 func (n *node) sibling() *node {
@@ -118,15 +106,6 @@ func (n *node) sibling() *node {
 		return n.parent.left
 	}
 	panic("Blah")
-}
-
-// sibling's far side child
-func niece(parent, child *node) *node {
-	doAssert(child == nil || child.parent == parent)
-	if child == parent.left {
-		return parent.right.right
-	}
-	return parent.left.left
 }
 
 func NewTree(compare CompareFunc) *Root {
@@ -320,87 +299,6 @@ func doAssert(b bool) {
 	}
 }
 
-func (root *Root) rotate(parent, child *node) {
-	doAssert(child.parent == parent)
-	if parent.left == child {
-		root.rotateRight(parent)
-	} else {
-		doAssert(parent.right == child)
-		root.rotateLeft(parent)
-	}
-}
-
-func (root* Root) deleteFixColors(parent, w *node) {
-	// Assumes PARENT is parent of W in a tree which is an rbt tree except that the
-	// black height balance may not be true at p.  Let x be the sibling of w.
-	// It is assumed that if If black height balance fails it is precisely
-	// because bh(w,p) = bh(x, p) + 1.  Therefore, we'll call x the deficient node.
-	// Result: the rbt property is restored.
-	x := sibling(parent, w)
-	n := niece(parent, x) // far side from x.
-	s := sibling(w, n) // near side to x.
-	if x != nil && x.color == Red {
-		x.color = Black
-		return
-	}
-	if (w.color == Red) {
-		// case 1. Deficient node has red sibling w
-		root.rotate(parent, w)
-		w.color = Black
-		parent.color = Red
-		/* We did
-                 P                   W
-		 h-1/ \h               h/ \h
-		 X   w               p   N
-                 h/ \h    -.  h-1/ \h
-                 S   N          X    S
-		 */
-		root.deleteFixColors(parent, s); // new sibling is black.
-	} else if n.color == Black && s.color == Black {
-		// case 2, both of w's children are black.
-		w.color = Red;
-		/* We did
-                 |h'                |h'-1
-                 _p                 _p
-                h/ \h+1            h/ \h
-                X   W              X   w
-                h/ \h    -.       h/ \h
-                 S   N              S   N
-		 */
-		g := parent.parent;
-		root.deleteFixColors(g, parent.sibling()); // work up.
-	} else { // at least one of s and n is red.
-		if n.color == Black {
-			// case 3, w's "far" child, n is black.
-			root.rotate(w, s)
-			w.color = Red
-			s.color = Black
-			/* We did
-			     .p                 .p
-			    h/ \h+1            h/ \h+1
-			    X   W              X    S
-			      h/ \h    -.        h/ \h
-			      s   N               B   w
-			    h/ \h                   h/ \h
-			    B   C                   C   N
-
-			 now flow into case 4. */
-		}
-		// case 4, w's "far" child, n is red.
-		root.rotate(parent, w);
-		n.color = Black;
-		w.color = parent.color;
-		parent.color = Black;
-		/* We did
-                 |h'                |h'
-		 _p                 _w
-		 h/ \h+1          h+1/ \h+1
-		 X   W              P   N
-                 h/ \h    -->   h/ \h
-		 _s   n          X   _s           */
-	}
-}
-
 func (root *Root) doDelete3(n *node) {
 	root.count--
 	if n.left != nil && n.right != nil {
@@ -515,125 +413,6 @@ func (root *Root) replaceNode(oldn, newn *node) {
 		newn.parent = oldn.parent;
 	}
 }
-
-func (root *Root) doDelete(toDelete *node) {
-	root.count--
-
-	// If toDelete is not the minimum node, find its predecessor
-	// (call it pred). We first copy *pred to *toDelete, then
-	// delete pred.
- 	//
-	//     T            P
-	//   P   R  =>    T   R
-	//    C            C
-	pred := toDelete
-	if pred.left != nil {
-		// TODO: this will invalidate the iterator.
-		// fix.
-		pred := maxPredecessor(toDelete)
-		toDelete.item = pred.item
-		toDelete = pred
-	}
-
-	// toDelete should have at most one child. Replace pred's contents with
-	// the child's.
-	n := toDelete
-	var child *node
-	if n.right != nil {
-		child := n.right
-		n.item = child.item
-		n.left = child.left
-		n.right = child.right
-	} else if n.left != nil {
-		child = n.left
-		n.item = child.item
-		n.left = child.left
-		n.right = child.right
-	} else {
-		// n is a leaf
-		if n.parent == nil {
-			root.tree = nil
-			return;
-		} else if n.isLeftChild() {
-			n.parent.left = nil
-			child = n.parent.right
-		} else {
-			n.parent.right = nil
-			child = n.parent.left
-		}
-	}
-
-	if n.color == Red {
-		return
-	}
-	if child != nil && child.color == Red {
-		n.color = Black
-		return
-	}
-
-	for true {
-		if n.parent == nil {
-			break
-		}
-		s := n.sibling()
-		if s != nil && s.color == Red {
-			n.parent.color = Red
-			s.color = Black
-			if n.isLeftChild() {
-				root.rotateLeft(n.parent)
-			} else {
-				root.rotateRight(n.parent)
-			}
-		}
-		s = n.sibling()
-		if n.parent.color == Black &&
-			s != nil &&
-			s.color == Black &&
-			getColor(s.left) == Black &&
-			getColor(s.right) == Black {
-			s.color = Red
-			n = n.parent
-			continue
-		}
-		if n.parent.color == Red &&
-			s != nil &&
-			s.color == Black &&
-			getColor(s.left) == Black &&
-			getColor(s.right) == Black {
-			s.color = Red
-			n.parent.color = Black
-			break
-		}
-		if s != nil && s.color == Black {
-			if n.isLeftChild() &&
-				getColor(s.right) == Black &&
-				getColor(s.left) == Red {
-				s.color = Red
-				s.left.color = Black
-				root.rotateRight(s)
-			} else if n.isRightChild() &&
-				getColor(s.left) == Black &&
-				getColor(s.right) == Red {
-				s.color = Red
-				s.right.color = Black
-				root.rotateLeft(s)
-			}
-		}
-		s = n.sibling()
-		s.color = n.parent.color
-		n.parent.color = Black
-		if n.isLeftChild() {
-			s.right.color = Black
-			root.rotateLeft(n.parent)
-		} else {
-			s.left.color = Black
-			root.rotateRight(n.parent)
-		}
-		break
-	}
-
-}
-
 
 /*
     X		     Y
