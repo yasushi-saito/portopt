@@ -191,7 +191,7 @@ func (iter Iterator) End() bool {
 
 // Check if the iterator points beyond the minimum element
 func (iter Iterator) Begin() bool {
-	return iter.node == iter.root.root
+	return iter.node == iter.root.minNode
 }
 
 // Return the current element.

@@ -6,6 +6,7 @@ package rbtree
 
 import "testing"
 import "math/rand"
+import "fmt"
 import "log"
 import "sort"
 
@@ -262,10 +263,10 @@ func compareContents(t *testing.T, oiter oracleIterator, titer Iterator) {
 		oi = oi.Prev()
 		ti = ti.Prev()
 	}
-	if ti.Begin() {
+	if !ti.Begin() {
 		t.Fatal("!ti.done", ti.Item())
 	}
-	if oi.Begin() {
+	if !oi.Begin() {
 		t.Fatal("!oi.done", oi.Item())
 	}
 }
@@ -332,5 +333,6 @@ func ExampleIntString() {
 	tree.Insert(MyItem{12, "value11"})
 
 	item := tree.Get(MyItem{10, ""})
-	log.Print("Found : ", item.(MyItem).value)
+	fmt.Println("Found: ", item.(MyItem).value)
+	// Output: Found:  value10
 }
