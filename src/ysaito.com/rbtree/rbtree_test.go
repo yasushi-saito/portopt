@@ -10,7 +10,7 @@ import "log"
 import "sort"
 
 // Create a tree storing a set of integers
-func testNewIntSet() *Root {
+func testNewIntSet() *Tree {
 	return NewTree(func(i1, i2 Item) int {
 		return int(i1.(int)) - int(i2.(int))
 	})
@@ -21,10 +21,10 @@ func TestEmpty(t *testing.T) {
 	if tree.Len() != 0 {
 		t.Error("Len!=0")
 	}
-	if !tree.FindGE(10).Done() {
+	if !tree.FindGE(10).End() {
 		t.Error("Not empty")
 	}
-	if !tree.FindLE(10).Done() {
+	if !tree.FindLE(10).End() {
 		t.Error("Not empty")
 	}
 	if tree.Get(10) != nil {
@@ -48,7 +48,7 @@ func TestFindGE(t *testing.T) {
 	if tree.FindGE(10).Item().(int) != 10 {
 		t.Error("FindGE 10")
 	}
-	if !tree.FindGE(11).Done() {
+	if !tree.FindGE(11).End() {
 		t.Error("FindGE 11")
 	}
 	if tree.FindGE(9).Item().(int) != 10 {
@@ -67,7 +67,7 @@ func TestFindLE(t *testing.T) {
 	if tree.FindLE(11).Item().(int) != 10 {
 		t.Error("FindLE 11")
 	}
-	if !tree.FindLE(9).Done() {
+	if !tree.FindLE(9).End() {
 		t.Error("FindLE 9")
 	}
 }
@@ -147,7 +147,7 @@ func (o *oracle) Insert(key int) bool {
 	n := len(o.data) + 1
 	newData := make([]int, n)
 	copy(newData, o.data)
-	newData[n - 1] = key
+	newData[n-1] = key
 	o.data = newData
 	sort.Sort(o)
 	return true
@@ -173,9 +173,9 @@ func (o *oracle) FindGE(t *testing.T, key int) oracleIterator {
 
 func (o *oracle) FindLE(t *testing.T, key int) oracleIterator {
 	iter := o.FindGE(t, key)
-	if !iter.Done() && o.data[iter.index] == key {
+	if !iter.End() && o.data[iter.index] == key {
 		return iter
-	} else if (iter.index == 0) {
+	} else if iter.index == 0 {
 		return oracleIterator{o, len(o.data)}
 	}
 	return oracleIterator{o, iter.index - 1}
@@ -184,7 +184,7 @@ func (o *oracle) FindLE(t *testing.T, key int) oracleIterator {
 func (o *oracle) Delete(key int) bool {
 	for i, e := range o.data {
 		if e == key {
-			newData := make([]int, len(o.data) - 1)
+			newData := make([]int, len(o.data)-1)
 			copy(newData, o.data[0:i])
 			copy(newData[i:], o.data[i+1:])
 			o.data = newData
@@ -202,8 +202,12 @@ type oracleIterator struct {
 	index int
 }
 
-func (oiter oracleIterator) Done() bool {
+func (oiter oracleIterator) End() bool {
 	return oiter.index >= len(oiter.o.data)
+}
+
+func (oiter oracleIterator) Begin() bool {
+	return oiter.index == 0
 }
 
 func (oiter oracleIterator) Item() int {
@@ -215,10 +219,11 @@ func (oiter oracleIterator) Next() oracleIterator {
 }
 
 func (oiter oracleIterator) Prev() oracleIterator {
-	if oiter.index == 0 {
-		return oracleIterator{oiter.o, oiter.index - 1}
-	}
-	return oracleIterator{oiter.o, len(oiter.o.data)}
+	return oracleIterator{oiter.o, oiter.index - 1}
+}
+
+func Foo() {
+	log.Print("FOo")
 }
 
 func compareContents(t *testing.T, oiter oracleIterator, titer Iterator) {
@@ -226,7 +231,7 @@ func compareContents(t *testing.T, oiter oracleIterator, titer Iterator) {
 	ti := titer
 
 	// Test forward iteration
-	for !oi.Done() && !ti.Done() {
+	for !oi.End() && !ti.End() {
 		// log.Print("Item: ", oi.Item(), ti.Item())
 		if ti.Item().(int) != oi.Item() {
 			t.Fatal("Wrong item", ti.Item(), oi.Item())
@@ -234,32 +239,38 @@ func compareContents(t *testing.T, oiter oracleIterator, titer Iterator) {
 		oi = oi.Next()
 		ti = ti.Next()
 	}
-	if !ti.Done() {
+	if !ti.End() {
 		t.Fatal("!ti.done", ti.Item())
 	}
-	if !oi.Done() {
+	if !oi.End() {
 		t.Fatal("!oi.done", oi.Item())
 	}
 
 	// Test reverse iteration
 	oi = oiter
 	ti = titer
-	for !oi.Done() && !ti.Done() {
-		if ti.Item().(int) != oi.Item() {
-			t.Fatal("Wrong item", ti.Item(), oi.Item())
+	for !oi.Begin() && !ti.Begin() {
+		if oi.End() {
+			if !ti.End() {
+				t.Fatal("End")
+			}
+		} else {
+			if ti.Item().(int) != oi.Item() {
+				t.Fatal("Wrong item", ti.Item(), oi.Item())
+			}
 		}
 		oi = oi.Prev()
 		ti = ti.Prev()
 	}
-	if !ti.Done() {
+	if ti.Begin() {
 		t.Fatal("!ti.done", ti.Item())
 	}
-	if !oi.Done() {
+	if oi.Begin() {
 		t.Fatal("!oi.done", oi.Item())
 	}
 }
 
-const testVerbose = false
+const testVerbose = true
 
 func TestRandomized(t *testing.T) {
 	const numKeys = 1000
@@ -271,26 +282,55 @@ func TestRandomized(t *testing.T) {
 		op := r.Intn(100)
 		if op < 50 {
 			key := r.Intn(numKeys)
-			if testVerbose { log.Print("Insert ", key) }
+			if testVerbose {
+				log.Print("Insert ", key)
+			}
 			o.Insert(key)
 			tree.Insert(key)
+			if key == 538 {
+				Foo()
+			}
+
 			compareContents(t, o.FindGE(t, int(-1)), tree.FindGE(-1))
 		} else if op < 90 && o.Len() > 0 {
 			key := o.RandomExistingKey(r)
-			if testVerbose { log.Print("DeleteExisting ", key) }
+			if testVerbose {
+				log.Print("DeleteExisting ", key)
+			}
 			o.Delete(key)
 			if !tree.DeleteWithKey(key) {
 				t.Fatal("DeleteExisting", key)
 			}
 			compareContents(t, o.FindGE(t, int(-1)), tree.FindGE(-1))
-		} else if (op < 95) {
+		} else if op < 95 {
 			key := int(r.Intn(numKeys))
-			if testVerbose { log.Print("FindGE ", key) }
+			if testVerbose {
+				log.Print("FindGE ", key)
+			}
 			compareContents(t, o.FindGE(t, key), tree.FindGE(key))
 		} else {
 			key := int(r.Intn(numKeys))
-			if testVerbose { log.Print("FindLE ", key) }
+			if testVerbose {
+				log.Print("FindLE ", key)
+			}
 			compareContents(t, o.FindLE(t, key), tree.FindLE(key))
 		}
 	}
+}
+
+//
+// Examples
+//
+func ExampleIntString() {
+	type MyItem struct {
+		key   int
+		value string
+	}
+
+	tree := NewTree(func(a, b Item) int { return a.(MyItem).key - b.(MyItem).key })
+	tree.Insert(MyItem{10, "value10"})
+	tree.Insert(MyItem{12, "value11"})
+
+	item := tree.Get(MyItem{10, ""})
+	log.Print("Found : ", item.(MyItem).value)
 }
