@@ -25,12 +25,7 @@ type Root struct {
 }
 
 type Iterator struct {
-	root *Root
 	node *node
-}
-
-func newIterator(r *Root, n *node) Iterator {
-	return Iterator{r, n}
 }
 
 func (iter Iterator) Done() bool {
@@ -78,11 +73,11 @@ func (n *node) prev() *node {
 }
 
 func (iter Iterator) Next() Iterator {
-	return Iterator{iter.root, iter.node.next()}
+	return Iterator{iter.node.next()}
 }
 
 func (iter Iterator) Prev() Iterator {
-	return Iterator{iter.root, iter.node.prev()}
+	return Iterator{iter.node.prev()}
 }
 
 func getColor(n *node) int {
@@ -165,22 +160,22 @@ func (root *Root) FindGE(key Item) Iterator {
 	n := root.tree
 	for true {
 		if n == nil {
-			return newIterator(root, nil)
+			return Iterator{nil}
 		}
 		comp := root.compare(key, n.item)
 		if comp == 0 {
-			return newIterator(root, n)
+			return Iterator{n}
 		} else if comp < 0 {
 			if n.left != nil {
 				n = n.left
 			} else {
-				return newIterator(root, n)
+				return Iterator{n}
 			}
 		} else {
 			if n.right != nil {
 				n = n.right
 			} else {
-				return newIterator(root, n.parent)
+				return Iterator{n.parent}
 			}
 		}
 	}
