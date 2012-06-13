@@ -1,7 +1,7 @@
 //
 // Created by Yaz Saito on 06/10/12.
 //
-// STL-like red-black tree implementation
+// A red-black tree implementation modeled after C++ STL.
 //
 // The algorithm is largely stoler from
 //
@@ -19,7 +19,8 @@ type Item interface{}
 type CompareFunc func(a, b Item) int
 
 type Root struct {
-	tree    *node
+	root *node
+	minNode, maxNode *node
 	count   int
 	compare CompareFunc
 }
@@ -46,12 +47,20 @@ func (root *Root) Get(key Item) Item {
 	return nil
 }
 
+func (root *Root) End() Iterator {
+	return Iterator{root, nil}
+}
+
+func (root *Root) Begin() Iterator {
+	return Iterator{root, root.minNode}
+}
+
 // Find the smallest element N s.t. N >= key, and return the iterator
 // pointing to the element. If no such element is found, iter.Done()
 // becomes true.
 func (root *Root) FindGE(key Item) Iterator {
 	n, _ := root.findGE(key)
-	return Iterator{n}
+	return Iterator{root, n}
 }
 
 // Find the largest element N s.t. N <= key, and return the iterator
@@ -60,18 +69,18 @@ func (root *Root) FindGE(key Item) Iterator {
 func (root *Root) FindLE(key Item) Iterator {
 	n, exact := root.findGE(key)
 	if exact {
-		return Iterator{n}
+		return Iterator{root, n}
 	}
 	if n != nil {
-		return Iterator{n.prev()}
+		return Iterator{root, n.prev()}
 	}
 	// return the max element
-	n = root.tree
+	n = root.root
 	if n == nil {
-		return Iterator{nil}
+		return Iterator{root, nil}
 	}
 	for n.right != nil { n = n.right }
-	return Iterator{n}
+	return Iterator{root, n}
 }
 
 // Insert an item. If the item is already in the tree, do nothing and
@@ -164,6 +173,7 @@ func (root *Root) DeleteWithIterator(iter Iterator) {
 }
 
 type Iterator struct {
+	root *Root
 	node *node
 }
 
@@ -184,8 +194,11 @@ func (iter Iterator) Item() interface{} {
 // element in the tree, the returned iterator becomes Done.
 //
 // The original iterator remains unchanged.
+//
+// REQUIRES: !iter.Done()
 func (iter Iterator) Next() Iterator {
-	return Iterator{iter.node.next()}
+	doAssert(!iter.Done())
+	return Iterator{iter.root, iter.node.next()}
 }
 
 // Return an iterator that points to the predecessor of the current
@@ -193,8 +206,15 @@ func (iter Iterator) Next() Iterator {
 // element in the tree, the returned iterator becomes Done.
 //
 // The original iterator remains unchanged.
+//
+// REQUIRES: !iter.Done()
 func (iter Iterator) Prev() Iterator {
-	return Iterator{iter.node.prev()}
+	if iter.node == nil {
+		doAssert(iter.root.Len() > 0)
+		return Iterator{iter.root, iter.root.maxNode}
+	}
+	doAssert(iter.node != iter.root.minNode)
+	return Iterator{iter.root, iter.node.prev()}
 }
 
 func doAssert(b bool) {
@@ -202,13 +222,14 @@ func doAssert(b bool) {
 		panic("rbtree internal assertion failed")
 	}
 }
+
 const Red = iota
 const Black = 1 + iota
 
 type node struct {
 	item                Item
 	parent, left, right *node
-	color               int
+	color               int  // Black or Red
 }
 
 //
@@ -299,14 +320,34 @@ func maxPredecessor(n *node) *node {
 // Private methods
 //
 
+func (root *Root) maybeSetMinNode(n *node) {
+	if root.minNode == nil {
+		root.minNode = n
+		root.maxNode = n
+	} else if root.compare(n.item, root.minNode.item) < 0 {
+		root.minNode = n
+	}
+}
+
+func (root *Root) maybeSetMaxNode(n *node) {
+	if root.maxNode == nil {
+		root.minNode = n
+		root.maxNode = n
+	} else if root.compare(n.item, root.maxNode.item) > 0 {
+		root.maxNode = n
+	}
+}
+
 func (root *Root) doInsert(n *node) bool {
-	if root.tree == nil {
+	if root.root == nil {
 		n.parent = nil
-		root.tree = n
+		root.root = n
+		root.minNode = n
+		root.maxNode = n
 		root.count++
 		return true
 	}
-	parent := root.tree
+	parent := root.root
 	for true {
 		comp := root.compare(n.item, parent.item)
 		if comp == 0 {
@@ -316,6 +357,7 @@ func (root *Root) doInsert(n *node) bool {
 				n.parent = parent
 				parent.left = n
 				root.count++
+				root.maybeSetMinNode(n)
 				return true
 			} else {
 				parent = parent.left
@@ -325,6 +367,7 @@ func (root *Root) doInsert(n *node) bool {
 				n.parent = parent
 				parent.right = n
 				root.count++
+				root.maybeSetMaxNode(n)
 				return true
 			} else {
 				parent = parent.right
@@ -338,7 +381,7 @@ func (root *Root) doInsert(n *node) bool {
 // node.item==key. Returns (nil, false) if all nodes in the tree are <
 // key.
 func (root *Root) findGE(key Item) (*node, bool) {
-	n := root.tree
+	n := root.root
 	for true {
 		if n == nil {
 			return nil, false
@@ -374,6 +417,13 @@ func (root *Root) findGE(key Item) (*node, bool) {
 //
 // http://en.literateprograms.org/Red-black_tree_(C)#chunk use:private function prototypes
 func (root *Root) doDelete(n *node) {
+	if root.minNode == n {
+		root.minNode = nil
+	}
+	if root.maxNode == n {
+		root.maxNode = nil
+	}
+
 	root.count--
 	if n.left != nil && n.right != nil {
 		pred := maxPredecessor(n)
@@ -392,6 +442,24 @@ func (root *Root) doDelete(n *node) {
 	root.replaceNode(n, child)
 	if (n.parent == nil && child != nil) {
 		child.color = Black
+	}
+	if (root.count > 0) {
+		if root.minNode == nil {
+			root.minNode = root.root
+			if root.minNode != nil {
+				for root.minNode.left != nil {
+					root.minNode = root.minNode.left
+				}
+			}
+		}
+		if root.maxNode == nil {
+			root.maxNode = root.root
+			if root.maxNode != nil {
+				for root.maxNode.right != nil {
+					root.maxNode = root.maxNode.right
+				}
+			}
+		}
 	}
 }
 
@@ -464,7 +532,7 @@ func (root* Root) deleteCase5(n *node) {
 
 func (root *Root) replaceNode(oldn, newn *node) {
 	if (oldn.parent == nil) {
-		root.tree = newn;
+		root.root = newn;
 	} else {
 		if (oldn == oldn.parent.left) {
 			oldn.parent.left = newn;
@@ -490,7 +558,7 @@ func (root *Root) rotateLeft(x *node) {
 	}
 	y.parent = x.parent
 	if x.parent == nil {
-		root.tree = y
+		root.root = y
 	} else {
 		if x.isLeftChild() {
 			x.parent.left = y
@@ -518,7 +586,7 @@ func (root *Root) rotateRight(y *node) {
 
 	x.parent = y.parent
 	if y.parent == nil {
-		root.tree = x
+		root.root = x
 	} else {
 		if y.isLeftChild() {
 			y.parent.left = x
