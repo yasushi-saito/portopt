@@ -157,49 +157,24 @@ func (root *Root) Get(key Item) Item {
 }
 
 func (root *Root) FindGE(key Item) Iterator {
-/*
-	n := root.findGE(key)
+	n, _ := root.findGE(key)
 	return Iterator{n}
-*/
-	n := root.tree
-	for true {
-		if n == nil {
-			return Iterator{nil}
-		}
-		comp := root.compare(key, n.item)
-		if comp == 0 {
-			return Iterator{n}
-		} else if comp < 0 {
-			if n.left != nil {
-				n = n.left
-			} else {
-				return Iterator{n}
-			}
-		} else {
-			if n.right != nil {
-				n = n.right
-			} else {
-				return Iterator{n.parent}
-			}
-		}
-	}
-	panic("should not reach here")
 }
 
-func (root *Root) findGE(key Item) *node {
+func (root *Root) findGE(key Item) (*node, bool) {
 	n := root.tree
 	for true {
 		if n == nil {
-			return nil
+			return nil, false
 		}
 		comp := root.compare(key, n.item)
 		if comp == 0 {
-			return n
+			return n, true
 		} else if comp < 0 {
 			if n.left != nil {
 				n = n.left
 			} else {
-				return n
+				return n, false
 			}
 		} else {
 			if n.right != nil {
@@ -207,11 +182,10 @@ func (root *Root) findGE(key Item) *node {
 			} else {
 				succ := n.next()
 				if succ == nil {
-					return nil
+					return nil, false
 				} else {
 					comp = root.compare(key, succ.item)
-					doAssert(comp >= 0)
-					return succ
+					return succ, (comp == 0)
 				}
 			}
 		}
