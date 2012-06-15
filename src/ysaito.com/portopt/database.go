@@ -162,7 +162,7 @@ func PanicOnError(err error, params... interface{}) {
 }
 
 func mustParseDecimal(s string) (int) {
-	value, err := strconv.ParseInt(s, 10, 0)
+	value, err := strconv.ParseInt(s, 10, 64)
 	PanicOnError(err, "Failed to parse ", s, " as a decimal string")
 	return int(value)
 }
