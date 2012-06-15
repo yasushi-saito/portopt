@@ -1,5 +1,13 @@
 package portopt
 import "math"
+import "log"
+
+func doAssert(b bool, message... interface{}) {
+	if !b {
+		log.Print(message...)
+		panic("Assertion failed")
+	}
+}
 
 type statsAccumulator struct {
 	numItems int
