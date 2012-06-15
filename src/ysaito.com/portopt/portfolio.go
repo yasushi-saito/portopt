@@ -37,28 +37,33 @@ func NewPortfolio(db *Database,
 
 func (p *Portfolio) RandomMutate() (*Portfolio) {
 	n := len(p.securities)
-	delta := p.totalWeight * 0.02;
 	q := Portfolio{
 		db: p.db,
 		securities: make([]portfolioEntry, n),
 	        totalWeight: 0.0, // filled later
-	        dateRange: p.dateRange,
+		dateRange: p.dateRange,
 	}
 	for i, e := range p.securities {
 		q.securities[i] = e
 	}
 
-	tmp := delta
-	for true {
-		i := rand.Intn(n)
-		if q.securities[i].weight > tmp {
-			q.securities[i].weight -= tmp
-			break
-		} else {
-			tmp -= q.securities[i].weight
-			q.securities[i].weight = 0
+	for i := 0; i < 10; i++ {
+		delta := p.totalWeight * 0.01;
+		tmp := delta
+		for true {
+			i := rand.Intn(n)
+			if q.securities[i].weight > tmp {
+				q.securities[i].weight -= tmp
+				break
+			} else {
+				tmp -= q.securities[i].weight
+				q.securities[i].weight = 0
+			}
 		}
+		i := rand.Intn(n)
+		q.securities[i].weight += delta
 	}
+	// Recompute the total weight
 	for _, e := range q.securities {
 		q.totalWeight += e.weight
 	}

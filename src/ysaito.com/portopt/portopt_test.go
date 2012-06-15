@@ -6,7 +6,7 @@ import "fmt"
 import "testing"
 import "time"
 import "math"
-
+import "github.com/yasushi-saito/fifo_queue"
 var pathSeq int = 0;
 
 func newDb(t *testing.T) (db *Database) {
@@ -50,7 +50,7 @@ func TestDateRange(t *testing.T) {
 	}
 }
 
-func compute(p *Portfolio) {
+func compute(p *Portfolio) (float64, float64) {
 	combinedVariance := 0.0
 	combinedMean := 0.0
 	db := p.Db()
@@ -72,7 +72,8 @@ func compute(p *Portfolio) {
 			// log.Print("CORR(", e1.ticker, ", ", e2.ticker, ")=", corr)
 		}
 	}
-	log.Print("Mean: ", combinedMean, "Stddev: ", math.Sqrt(combinedVariance) / combinedMean)
+	stddev := math.Sqrt(combinedVariance) / combinedMean
+	return combinedMean, stddev
 }
 
 func TestEff(t *testing.T) {
@@ -104,11 +105,32 @@ func TestEff(t *testing.T) {
 		"VSIAX": 1.0, // Small-cap value index adm
 		"VISVX": 1.0, // small-cap value index inv
 	})
-	compute(portfolio)
-	q := portfolio.RandomMutate()
-	for i := 0; i < 100; i++ {
-		q = q.RandomMutate()
-		compute(q)
+	frontier := newFrontier()
+	fifo := fifo_queue.NewQueue()
+	fifo.PushBack(portfolio)
+
+	for fifo.Len() > 0 {
+		p := fifo.PopFront().(*Portfolio)
+		mean, stddev := compute(p)
+		maxTries := 3
+		if frontier.IsMaxX(mean) {
+			maxTries = 1000
+			fmt.Print(fifo.Len(), "New: Mean: ", mean, " Stddev: ", stddev, "\n")
+		} else {
+			fmt.Print(fifo.Len(), "Ins: Mean: ", mean, " Stddev: ", stddev, "\n")
+		}
+
+		for i := 0; i < maxTries; i++ {
+			newP := p.RandomMutate()
+			mean, stddev = compute(newP)
+			inserted, newBound := frontier.Insert(mean, stddev)
+			if inserted {
+				fifo.PushBack(newP)
+			}
+			if newBound {
+				break
+			}
+		}
 	}
 }
 
