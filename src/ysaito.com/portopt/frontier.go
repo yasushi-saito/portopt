@@ -5,24 +5,51 @@
 package portopt
 import "github.com/yasushi-saito/rbtree"
 
-type frontierElement struct {
+const frontierMultiplier = 1000
+
+type frontierItem struct {
 	x int64
 	y int64
+	item interface{}
 }
 
 type frontier struct {
 	tree *rbtree.Tree
 }
 
-func getElement(iter rbtree.Iterator) frontierElement {
-	return iter.Item().(frontierElement)
+type frontierIterator struct {
+	iter rbtree.Iterator
+}
+
+func (iter frontierIterator) Item() interface{} {
+	return iter.iter.Item().(frontierItem).item
+}
+
+func (iter frontierIterator) Mean() float64 {
+	return float64(iter.iter.Item().(frontierItem).x) / float64(frontierMultiplier)
+}
+
+func (iter frontierIterator) Stddev() float64 {
+	return float64(iter.iter.Item().(frontierItem).y) / float64(frontierMultiplier)
+}
+
+func (iter frontierIterator) Next() frontierIterator {
+	return frontierIterator{iter.iter.Next()}
+}
+
+func (iter frontierIterator) Done() bool {
+	return iter.iter.Limit()
+}
+
+func getItem(iter rbtree.Iterator) frontierItem {
+	return iter.Item().(frontierItem)
 }
 
 func newFrontier() *frontier {
 	f := new(frontier)
 	f.tree = rbtree.NewTree(func(p1, p2 rbtree.Item) int {
-		f1 := p1.(frontierElement)
-		f2 := p2.(frontierElement)
+		f1 := p1.(frontierItem)
+		f2 := p2.(frontierItem)
 		if f1.x < f2.x {
 			return -1
 		} else if f1.x == f2.x {
@@ -34,7 +61,7 @@ func newFrontier() *frontier {
 }
 
 // See if points <left, middle, right> form a convex curve
-func isConvex(left, middle, right frontierElement) bool {
+func isConvex(left, middle, right frontierItem) bool {
 	doAssert(left.x < middle.x && middle.x < right.x,
 		"Wrong order: ", left, middle, right)
 	width := right.x - left.x
@@ -43,7 +70,7 @@ func isConvex(left, middle, right frontierElement) bool {
 	return middle.y > expectedY
 }
 
-func isConcave(left, middle, right frontierElement) bool {
+func isConcave(left, middle, right frontierItem) bool {
 	doAssert(left.x < middle.x && middle.x < right.x,
 		"Wrong order: ", left, middle, right)
 	width := right.x - left.x
@@ -57,14 +84,18 @@ func (f *frontier) IsMaxX(xf float64) bool {
 	if f.tree.Len() == 0 {
 		return true
 	}
-	return x >= getElement(f.tree.Max()).x - 1
+	return x >= getItem(f.tree.Max()).x - 1
 }
 
-func (f *frontier) Insert(xf, yf float64) (bool, bool) {
-	x := int64(xf * 1000)
-	y := int64(yf * 1000)
+func (f *frontier) Iterate() frontierIterator {
+	return frontierIterator{iter: f.tree.Min()}
+}
 
-	thisElem := frontierElement{x: x, y: y}
+func (f *frontier) Insert(xf, yf float64, item interface{}) (bool, bool) {
+	x := int64(xf * frontierMultiplier)
+	y := int64(yf * frontierMultiplier)
+
+	thisElem := frontierItem{x: x, y: y, item: item}
 	if f.tree.Len() == 0 {
 		f.tree.Insert(thisElem)
 		return true, true
@@ -73,9 +104,9 @@ func (f *frontier) Insert(xf, yf float64) (bool, bool) {
 	leftIter := f.tree.FindLE(thisElem)
 	rightIter := f.tree.FindGE(thisElem)
 
-	if !rightIter.Limit() && x == getElement(rightIter).x {
+	if !rightIter.Limit() && x == getItem(rightIter).x {
 		// Exact match found
-		if y < getElement(rightIter).y {
+		if y < getItem(rightIter).y {
 			f.tree.DeleteWithIterator(rightIter)
 			f.tree.Insert(thisElem)
 			return true, false
@@ -83,7 +114,7 @@ func (f *frontier) Insert(xf, yf float64) (bool, bool) {
 		return false, false
 	}
 	if leftIter.NegativeLimit() {
-		if y < getElement(f.tree.Min()).y {
+		if y < getItem(f.tree.Min()).y {
 			f.tree.Insert(thisElem)
 			return true, true
 		}
@@ -95,14 +126,14 @@ func (f *frontier) Insert(xf, yf float64) (bool, bool) {
 	}
 
 	if isConcave(
-		getElement(leftIter),
+		getItem(leftIter),
 		thisElem,
-		getElement(rightIter)) {
+		getItem(rightIter)) {
 		f.tree.Insert(thisElem)
 		// Remove elements to the left that make the curve concave
 		// after adding thisElem.
 		ti := leftIter.Prev()
-		for !ti.NegativeLimit() && !isConcave(getElement(ti), getElement(leftIter), thisElem) {
+		for !ti.NegativeLimit() && !isConcave(getItem(ti), getItem(leftIter), thisElem) {
 			tmp := leftIter
 			leftIter = ti
 			ti = ti.Prev()
@@ -112,7 +143,7 @@ func (f *frontier) Insert(xf, yf float64) (bool, bool) {
 		// Remove elements to the right that make the curve concave
 		// after adding thisElem.
 		ti = rightIter.Next()
-		for !ti.Limit() && !isConcave(thisElem, getElement(rightIter), getElement(ti)) {
+		for !ti.Limit() && !isConcave(thisElem, getItem(rightIter), getItem(ti)) {
 			tmp := rightIter
 			rightIter = ti
 			ti = ti.Next()

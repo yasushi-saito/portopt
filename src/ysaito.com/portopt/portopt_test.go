@@ -90,7 +90,6 @@ func TestEff(t *testing.T) {
 		"VCADX": 1.0,  // CA interm bond
  		"VTMGX": 1.0, // tax-managed intl
 		"VPCCX": 1.0, // Primecap core
-
 		"VVIAX": 1.0, // value index adm
 		"VMVIX": 1.0, // mid-cap value index inv
 		"VMVAX": 1.0, // mid-cap value index adm
@@ -112,7 +111,7 @@ func TestEff(t *testing.T) {
 	for fifo.Len() > 0 {
 		p := fifo.PopFront().(*Portfolio)
 		mean, stddev := compute(p)
-		maxTries := 3
+		maxTries := 10
 		if frontier.IsMaxX(mean) {
 			maxTries = 1000
 			fmt.Print(fifo.Len(), "New: Mean: ", mean, " Stddev: ", stddev, "\n")
@@ -123,7 +122,7 @@ func TestEff(t *testing.T) {
 		for i := 0; i < maxTries; i++ {
 			newP := p.RandomMutate()
 			mean, stddev = compute(newP)
-			inserted, newBound := frontier.Insert(mean, stddev)
+			inserted, newBound := frontier.Insert(mean, stddev, newP)
 			if inserted {
 				fifo.PushBack(newP)
 			}
@@ -131,6 +130,11 @@ func TestEff(t *testing.T) {
 				break
 			}
 		}
+	}
+
+	for iter := frontier.Iterate(); !iter.Done(); iter = iter.Next() {
+		fmt.Print("P: mean=", iter.Mean(), " stddev=", iter.Stddev(),
+			" port=", iter.Item(), "\n")
 	}
 }
 
