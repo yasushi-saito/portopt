@@ -139,6 +139,7 @@ func TestEff(t *testing.T) {
 		mean, stddev := compute(p)
 		maxTries := 10
 		if mean >= frontier.MaxX() {
+			// Try many times to find a better return
 			maxTries = 200
 			fmt.Print(fifo.Len(), " New: Mean: ", mean, " Stddev: ", stddev, "\n")
 		} else {
@@ -149,17 +150,18 @@ func TestEff(t *testing.T) {
 			newP := p.RandomMutate()
 			mean, stddev = compute(newP)
 			maxX := frontier.MaxX()
-			inserted, newBound := frontier.Insert(mean, stddev, newP)
+			inserted := frontier.Insert(mean, stddev, newP)
 			if inserted {
 				fifo.PushBack(newP)
-				doAssert(newBound == (mean > maxX),
-					"nb=", newBound,
-					"mean=", mean,
-					"maxx=", maxX)
-
-			}
-			if newBound {
-				break
+				if mean > maxX {
+					// Found a portfolio with the
+					// best return so far. We'll
+					// start searching from newP
+					// with a large maxTries
+					// later, so shortcut the
+					// search from p now.
+					break
+				}
 			}
 		}
 	}

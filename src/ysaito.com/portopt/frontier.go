@@ -88,14 +88,16 @@ func (f *frontier) Iterate() frontierIterator {
 	return frontierIterator{iter: f.tree.Min()}
 }
 
-func (f *frontier) Insert(x, y float64, item interface{}) (bool, bool) {
+// Returns true if the entry was inserted (i.e., it is part of the
+// efficient frontier)
+func (f *frontier) Insert(x, y float64, item interface{}) bool {
 	maxX := f.MaxX()
 
 	thisElem := frontierItem{x: x, y: y, item: item}
 	if f.tree.Len() == 0 {
 		f.tree.Insert(thisElem)
 		doAssert((x > maxX), " nb=", x, " mean=", x, " maxx=", maxX)
-		return true, true
+		return true
 	}
 
 	leftIter := f.tree.FindLE(thisElem)
@@ -106,21 +108,21 @@ func (f *frontier) Insert(x, y float64, item interface{}) (bool, bool) {
 		if y < getItem(rightIter).y {
 			f.tree.DeleteWithIterator(rightIter)
 			f.tree.Insert(thisElem)
-			return true, false
+			return true
 		}
-		return false, false
+		return false
 	}
 	if leftIter.NegativeLimit() {
 		if y < getItem(f.tree.Min()).y {
 			f.tree.Insert(thisElem)
-			return true, false
+			return true
 		}
-		return false, false
+		return false
 	}
 	if rightIter.Limit() {
 		f.tree.Insert(thisElem)
 		doAssert((x > maxX), " nb=", x, " mean=", x, " maxx=", maxX)
-		return true, true
+		return true
 	}
 
 	if isConcave(
@@ -147,8 +149,8 @@ func (f *frontier) Insert(x, y float64, item interface{}) (bool, bool) {
 			ti = ti.Next()
 			f.tree.DeleteWithIterator(tmp)
 		}
-		return true, false
+		return true
 	}
-	return false, false
+	return false
 }
 
