@@ -5,7 +5,6 @@ import "os"
 import "fmt"
 import "testing"
 import "time"
-import "math"
 import "github.com/yasushi-saito/fifo_queue"
 var pathSeq int = 0;
 
@@ -50,36 +49,6 @@ func TestDateRange(t *testing.T) {
 	}
 }
 
-func compute(p *Portfolio) (float64, float64) {
-	combinedVariance := 0.0
-	combinedMean := 0.0
-	db := p.Db()
-	for _, e1 := range p.List() {
-		w1 := e1.weight / p.TotalWeight()
-		stats1, err := db.Stats(e1.ticker, p.DateRange())
-		if err != nil { panic(err) }
-
-		combinedMean += w1 * stats1.Mean
-
-		for _, e2 := range p.List() {
-			corr, err := db.Correlation(e1.ticker, e2.ticker)
-			if err != nil { panic(err) }
-			w2 := e2.weight / p.TotalWeight()
-			stats2, err := db.Stats(e2.ticker, p.DateRange())
-			if err != nil { panic(err) }
-			combinedVariance += w1 * w2 * corr * stats1.Stddev * stats2.Stddev
-			// log.Print("CORR(", e1.ticker, ", ", e2.ticker, ")=", corr)
-		}
-	}
-	var stddev float64
-	if (combinedVariance <= 0) {
-		stddev = 0
-	} else {
-		stddev = math.Sqrt(combinedVariance) / combinedMean
-	}
-	return combinedMean, stddev
-}
-
 func TestCorrelation(t *testing.T) {
 	err := os.MkdirAll("/tmp/portopt_test", 0700)
 	if err != nil { t.Fatal(err) }
@@ -106,7 +75,6 @@ func TestEff(t *testing.T) {
 	dateRange := NewDateRange(time.Date(1980, time.Month(1), 1, 0, 0, 0, 0, time.UTC),
 		time.Now(),
 		time.Duration(time.Hour * 24 * 90))
-/*
 	portfolio := NewPortfolio(db, dateRange, map[string]float64{
 		"VCADX": 1.0,  // CA interm bond
  		"VTMGX": 1.0, // tax-managed intl
@@ -124,18 +92,18 @@ func TestEff(t *testing.T) {
 		"VWO": 1.0,  // Emerging market ETF
 		"VSIAX": 1.0, // Small-cap value index adm
 		"VISVX": 1.0, // small-cap value index inv
-	})*/
+	})
 /*	portfolio := NewPortfolio(db, dateRange, map[string]float64{
 		"^GSPC": 1.0,  // S&P 500 index
 		"VBMFX" : 1.0,  // Vanguard total bond market index
 		"VGTSX" : 1.0,  // Vanguard total intl index
 	})*/
-
+/*
 	portfolio := NewPortfolio(db, dateRange, map[string]float64{
 		"^GSPC": 1.0,  // S&P 500 index
 		"VFSTX" : 1.0,  // Vanguard short-term investment grade
 		"VGTSX" : 1.0,  // Vanguard total intl index
-	})
+	})*/
 
 	frontier := newFrontier()
 	fifo := fifo_queue.NewQueue()
@@ -143,11 +111,11 @@ func TestEff(t *testing.T) {
 
 	for fifo.Len() > 0 {
 		p := fifo.PopFront().(*Portfolio)
-		mean, stddev := compute(p)
-		maxTries := 10
-		if mean >= frontier.MaxX() {
+		stats := p.Stats()
+		maxTries := 20
+		if stats.perPeriodReturn >= frontier.MaxX() {
 			// Try many times to find a better return
-			maxTries = 200
+			maxTries = 100
 			// fmt.Print(fifo.Len(), " New: Mean: ", mean, " Stddev: ", stddev, "\n")
 		} else {
 			// fmt.Print(fifo.Len(), " Ins: Mean: ", mean, " Stddev: ", stddev, "\n")
@@ -155,12 +123,12 @@ func TestEff(t *testing.T) {
 
 		for i := 0; i < maxTries; i++ {
 			newP := p.RandomMutate()
-			mean, stddev = compute(newP)
+			stats := newP.Stats()
 			maxX := frontier.MaxX()
-			inserted := frontier.Insert(mean, stddev, newP)
+			inserted := frontier.Insert(stats.perPeriodReturn, stats.stddev, newP)
 			if inserted {
 				fifo.PushBack(newP)
-				if mean > maxX {
+				if stats.perPeriodReturn > maxX {
 					// Found a portfolio with the
 					// best return so far. We'll
 					// start searching from newP

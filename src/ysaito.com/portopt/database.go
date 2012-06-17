@@ -45,7 +45,8 @@ type TickerPair struct {
 }
 
 type SecurityStats struct {
-	Mean float64
+	PerPeriodReturn float64
+	ArithmeticMean float64
 	Stddev float64
 }
 
@@ -67,16 +68,17 @@ func (db *Database) Stats(ticker string, r *dateRange) (SecurityStats, error) {
 		t := i.Time().Unix()
 		acc.Add(s1.priceMap[t])
 	}
-	stats.Mean = acc.Mean()
+	stats.PerPeriodReturn = acc.PerPeriodReturn()
+	stats.ArithmeticMean = acc.ArithmeticMean()
 	stats.Stddev = acc.StdDev()
 	s1.statsCache[r] = stats
-	log.Print("Stats: ", ticker, " ", s1.priceDateRange.String(), " ", r.String(), " mean=", stats.Mean, " stddev=", stats.Stddev)
+	log.Print("Stats: ", ticker, " ", s1.priceDateRange.String(), " ", r.String(), " return=", stats.PerPeriodReturn, " stddev=", stats.Stddev, " mean=", stats.ArithmeticMean)
 	return stats, nil
 }
 
 func (db *Database) Correlation (ticker1 string, ticker2 string) (float64, error) {
 	p := TickerPair{ ticker1: ticker1, ticker2 : ticker2 }
-	// if p.ticker1 == p.ticker2 { return 1.0, nil }
+	if p.ticker1 == p.ticker2 { return 1.0, nil }
 	if p.ticker1 > p.ticker2 {
 		p.ticker1, p.ticker2 = p.ticker2, p.ticker1
 	}
@@ -105,6 +107,7 @@ func (db *Database) Correlation (ticker1 string, ticker2 string) (float64, error
 	}
 	corr = diffTotal / float64(stats1.NumItems()) / stats1.StdDev() / stats2.StdDev()
 	db.correlationCache[p] = corr
+	log.Print("Corr: ", ticker1, "-", ticker2, ": ", corr)
 	return corr, nil
 }
 

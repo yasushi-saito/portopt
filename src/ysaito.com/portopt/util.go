@@ -14,6 +14,7 @@ type statsAccumulator struct {
 	frozen bool
 	data []float64
 	perPeriodReturn float64
+	arithmeticMean float64
 	stddev float64
 }
 
@@ -44,6 +45,7 @@ func (s *statsAccumulator) freeze() {
 	n := float64(len(s.data))
 	firstValue := s.data[0]
 	lastValue := s.data[len(s.data) - 1]
+	arithMean := 0.0
 	if lastValue >= firstValue {
 		s.perPeriodReturn = math.Pow((lastValue - firstValue), 1.0 / (n-1)) - 1
 	} else {
@@ -54,8 +56,10 @@ func (s *statsAccumulator) freeze() {
 	for i, v := range s.data {
 		expected := firstValue * math.Pow((1 + s.perPeriodReturn), float64(i))
 		delta2 += (v - expected) * (v - expected)
+		arithMean += v
 	}
 	s.stddev = math.Sqrt(delta2 / n)
+	s.arithmeticMean = arithMean / n
 /*	log.Print("STAT: ", s.label, " values=", firstValue, ",", lastValue,
 		" x=", s.perPeriodReturn)*/
 
@@ -78,9 +82,9 @@ func (s *statsAccumulator) PerPeriodReturn() float64 {
 	return s.perPeriodReturn
 }
 
-func (s *statsAccumulator) Mean() float64 {
+func (s *statsAccumulator) ArithmeticMean() float64 {
 	s.freeze()
-	return s.perPeriodReturn
+	return s.arithmeticMean
 }
 
 func (s *statsAccumulator) StdDev() float64 {
