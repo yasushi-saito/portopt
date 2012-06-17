@@ -87,7 +87,6 @@ func (db *Database) Correlation (ticker1 string, ticker2 string) (float64, error
 	if err != nil { return -1.0, err }
 
 	dateRange := s1.priceDateRange.Intersect(s2.priceDateRange)
-	log.Print("RANGE: ", s1.priceDateRange, s2.priceDateRange, dateRange)
 	stats1 := newStatsAccumulator(ticker1)
 	stats2 := newStatsAccumulator(ticker2)
 
@@ -130,7 +129,7 @@ func (db *Database) FindSecurity(ticker string) (*Security, error) {
 
 	now := time.Now()
 	r := db.GetDateRange(ticker)
-	if r.Empty() || (now.Sub(r.End()) >= 24 * 3600 * 30) {
+	if r.Empty() || (now.Sub(r.End()) >= time.Hour * 24 * 30 * 2) {
 		log.Print("Filling ", ticker, " from interweb, range=", r.String(), now.Sub(r.End()))
 		err := db.fillFromYahoo(ticker)
 		if err != nil { return nil, err }

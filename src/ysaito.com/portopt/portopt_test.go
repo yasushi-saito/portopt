@@ -117,8 +117,8 @@ func TestEff(t *testing.T) {
 		"VIMSX": 1.0, // mid-cap index inv
 		"VIMAX": 1.0, // mid-cap index adm
 		"VTMSX": 1.0, // T-M smallcap
-//		"VGHAX": 1.0, // Healthcare adm
-//		"VGHCX": 1.0, // Healthcare inv
+		"VGHAX": 1.0, // Healthcare adm
+		"VGHCX": 1.0, // Healthcare inv
 		"VSS": 1.0,  // Ex-us smallcap ETF
 		"DLS": 1.0,  // Wisdomtree intl smallcap dividend
 		"VWO": 1.0,  // Emerging market ETF
@@ -166,9 +166,6 @@ func TestEff(t *testing.T) {
 		}
 	}
 
-	for iter := frontier.Iterate(); !iter.Done(); iter = iter.Next() {
-		fmt.Print("P: mean=", iter.Mean(), " stddev=", iter.Stddev(),
-			" port=", iter.Item(), "\n")
-	}
+	fmt.Print(frontier.String())
 }
 

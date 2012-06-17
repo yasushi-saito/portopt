@@ -3,6 +3,8 @@
 //
 
 package portopt
+import "bytes"
+import "fmt"
 import "github.com/yasushi-saito/rbtree"
 
 type frontierItem struct {
@@ -108,6 +110,8 @@ func (f *frontier) Insert(x, y float64, item interface{}) bool {
 		if y < getItem(rightIter).y {
 			f.tree.DeleteWithIterator(rightIter)
 			f.tree.Insert(thisElem)
+			f.maybeRemoveLeftElements(thisElem, leftIter.Prev())
+			f.maybeRemoveRightElements(thisElem, rightIter.Next())
 			return true
 		}
 		return false
@@ -115,13 +119,14 @@ func (f *frontier) Insert(x, y float64, item interface{}) bool {
 	if leftIter.NegativeLimit() {
 		if y < getItem(f.tree.Min()).y {
 			f.tree.Insert(thisElem)
+			f.maybeRemoveRightElements(thisElem, rightIter)
 			return true
 		}
 		return false
 	}
 	if rightIter.Limit() {
 		f.tree.Insert(thisElem)
-		doAssert((x > maxX), " nb=", x, " mean=", x, " maxx=", maxX)
+		f.maybeRemoveLeftElements(thisElem, leftIter)
 		return true
 	}
 
@@ -130,27 +135,65 @@ func (f *frontier) Insert(x, y float64, item interface{}) bool {
 		thisElem,
 		getItem(rightIter)) {
 		f.tree.Insert(thisElem)
-		// Remove elements to the left that make the curve concave
-		// after adding thisElem.
-		ti := leftIter.Prev()
-		for !ti.NegativeLimit() && !isConcave(getItem(ti), getItem(leftIter), thisElem) {
-			tmp := leftIter
-			leftIter = ti
-			ti = ti.Prev()
-			f.tree.DeleteWithIterator(tmp)
-		}
 
-		// Remove elements to the right that make the curve concave
-		// after adding thisElem.
-		ti = rightIter.Next()
-		for !ti.Limit() && !isConcave(thisElem, getItem(rightIter), getItem(ti)) {
-			tmp := rightIter
-			rightIter = ti
-			ti = ti.Next()
-			f.tree.DeleteWithIterator(tmp)
-		}
+		f.maybeRemoveLeftElements(thisElem, leftIter)
+		f.maybeRemoveRightElements(thisElem, rightIter)
 		return true
 	}
 	return false
+}
+
+// Remove elements <= leftIter that make the curve concave after
+// adding thisElem.
+func (f *frontier) maybeRemoveLeftElements(
+	thisElem frontierItem, leftIter rbtree.Iterator) {
+	if leftIter.NegativeLimit() {
+		return
+	}
+
+	if getItem(leftIter).y >= thisElem.y {
+		tmp := leftIter
+		leftIter = leftIter.Prev()
+		f.tree.DeleteWithIterator(tmp)
+	}
+
+	if leftIter.NegativeLimit() {
+		return
+	}
+	ti := leftIter.Prev()
+
+	for !ti.NegativeLimit() && !isConcave(getItem(ti), getItem(leftIter), thisElem) {
+		tmp := leftIter
+		leftIter = ti
+		ti = ti.Prev()
+		f.tree.DeleteWithIterator(tmp)
+	}
+}
+
+
+// Remove elements >= rightIter that make the curve concave after
+// adding thisElem.
+func (f *frontier) maybeRemoveRightElements(
+	thisElem frontierItem, rightIter rbtree.Iterator) {
+	if rightIter.Limit() {
+		return
+	}
+
+	ti := rightIter.Next()
+	for !ti.Limit() && !isConcave(thisElem, getItem(rightIter), getItem(ti)) {
+		tmp := rightIter
+		rightIter = ti
+		ti = ti.Next()
+		f.tree.DeleteWithIterator(tmp)
+	}
+}
+
+func (f *frontier) String() string {
+	buf := bytes.NewBufferString("")
+	for iter := f.Iterate(); !iter.Done(); iter = iter.Next() {
+		fmt.Fprint(buf, "P: mean=", iter.Mean(), " stddev=", iter.Stddev(),
+			" port=", iter.Item(), "\n")
+	}
+	return buf.String()
 }
 
