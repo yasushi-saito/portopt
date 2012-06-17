@@ -14,6 +14,7 @@ type dateRange struct {
 	end time.Time
 	samplingInterval time.Duration
 }
+
 type dateRangeIterator struct {
 	r *dateRange
 	t time.Time

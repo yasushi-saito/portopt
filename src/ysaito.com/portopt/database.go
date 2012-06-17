@@ -27,10 +27,16 @@ type Database struct {
 type Security struct {
 	Ticker string
 	Weight float64
-	dateRange *dateRange
+
+	// The date range for which the priceMap is defined
+	priceDateRange *dateRange
 
 	// Date (UNIX time) -> Adjusted closing price, as reported by yahoo.
 	priceMap map[int64]float64
+
+	// Cache of previously computed security stats. The key must
+	// be a subrange of this.dateRange.
+	statsCache map[*dateRange]SecurityStats
 };
 
 type TickerPair struct {
@@ -50,12 +56,18 @@ func (db *Database) Stats(ticker string, r *dateRange) (SecurityStats, error) {
 	s1, err := db.FindSecurity(ticker)
 	if err != nil { return stats, err }
 
+	stats, found := s1.statsCache[r]
+	if found {
+		return stats, nil
+	}
+
 	for i := r.Begin(); !i.Done(); i.Next() {
 		t := i.Time().Unix()
 		acc.Add(s1.priceMap[t])
 	}
 	stats.Mean = acc.Mean()
 	stats.Stddev = acc.StdDev()
+	s1.statsCache[r] = stats
 	return stats, nil
 }
 
@@ -74,8 +86,8 @@ func (db *Database) Correlation (ticker1 string, ticker2 string) (float64, error
 	s2, err := db.FindSecurity(ticker2)
 	if err != nil { return -1.0, err }
 
-	dateRange := s1.dateRange.Intersect(s2.dateRange)
-	log.Print("RANGE: ", s1.dateRange, s2.dateRange, dateRange)
+	dateRange := s1.priceDateRange.Intersect(s2.priceDateRange)
+	log.Print("RANGE: ", s1.priceDateRange, s2.priceDateRange, dateRange)
 	stats1 := newStatsAccumulator(ticker1)
 	stats2 := newStatsAccumulator(ticker2)
 
@@ -117,19 +129,20 @@ func (db *Database) FindSecurity(ticker string) (*Security, error) {
 	}
 
 	now := time.Now()
-	dateRange := db.GetDateRange(ticker)
-	if dateRange.Empty() || (now.Sub(dateRange.End()) >= 24 * 3600 * 30) {
-		log.Print("Filling ", ticker, " from interweb, range=", dateRange.String(), now.Sub(dateRange.End()))
+	r := db.GetDateRange(ticker)
+	if r.Empty() || (now.Sub(r.End()) >= 24 * 3600 * 30) {
+		log.Print("Filling ", ticker, " from interweb, range=", r.String(), now.Sub(r.End()))
 		err := db.fillFromYahoo(ticker)
 		if err != nil { return nil, err }
 	}
 	s = new(Security)
 	s.Ticker = ticker
 	s.priceMap = make(map[int64]float64)
+	s.statsCache = make(map[*dateRange]SecurityStats)
 
 	var minDate time.Time
 	var maxDate time.Time
-	for i := dateRange.Begin(); !i.Done(); i.Next() {
+	for i := r.Begin(); !i.Done(); i.Next() {
 		price := searchPrice(db, ticker, i.Time(), minInterval)
 		if price >= 0.0 {
 			if minDate.IsZero() || minDate.After(i.Time()) {
@@ -143,7 +156,7 @@ func (db *Database) FindSecurity(ticker string) (*Security, error) {
 			break;
 		}
 	}
-	s.dateRange = NewDateRange(minDate, maxDate, minInterval)
+	s.priceDateRange = NewDateRange(minDate, maxDate, minInterval)
 	db.cachedSecurities[ticker] = s
 	return s, nil;
 }
