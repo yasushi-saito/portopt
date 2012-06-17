@@ -10,42 +10,80 @@ func doAssert(b bool, message... interface{}) {
 }
 
 type statsAccumulator struct {
-	numItems int
-	min float64
-	max float64
-	total float64
-	totalSquared float64
+	label string
+	frozen bool
+	data []float64
+	perPeriodReturn float64
+	stddev float64
+}
+
+func newStatsAccumulator(label string) *statsAccumulator {
+	return &statsAccumulator{label: label, data: make([]float64, 0, 100)}
 }
 
 func (s *statsAccumulator) Add(v float64) {
-	if s.numItems == 0 || v < s.min {
-		s.min = v
+	doAssert(!s.frozen)
+	l := len(s.data)
+	cc := cap(s.data)
+	if l >= cc {
+		n := make([]float64, cap(s.data) * 2)
+		copy(n, s.data)
+		s.data = n
 	}
-	if s.numItems == 0 || v > s.max {
-		s.max = v
+
+	s.data = s.data[0:l + 1]
+	s.data[l] = v
+}
+
+func (s *statsAccumulator) freeze() {
+	if s.frozen {
+		return
 	}
-	s.numItems++
-	s.total += v
-	s.totalSquared += v * v
+	s.frozen = true
+
+	n := float64(len(s.data))
+	firstValue := s.data[0]
+	lastValue := s.data[len(s.data) - 1]
+	if lastValue >= firstValue {
+		s.perPeriodReturn = math.Pow((lastValue - firstValue), 1.0 / (n-1)) - 1
+	} else {
+		s.perPeriodReturn = math.Pow((firstValue - lastValue), 1.0 / (n-1)) - 1
+	}
+
+	delta2 := 0.0
+	for i, v := range s.data {
+		expected := firstValue * math.Pow((1 + s.perPeriodReturn), float64(i))
+		delta2 += (v - expected) * (v - expected)
+	}
+	s.stddev = math.Sqrt(delta2 / n)
+/*	log.Print("STAT: ", s.label, " values=", firstValue, ",", lastValue,
+		" x=", s.perPeriodReturn)*/
+
 }
 
-func (s *statsAccumulator) NumItems() (int) {
-	return s.numItems
+func (s *statsAccumulator) NumItems() int {
+	return len(s.data)
 }
 
-func (s *statsAccumulator) Min() (float64) {
-	return s.min
+func (s *statsAccumulator) DeltaForPeriod(i int) float64 {
+	s.freeze()
+	firstValue := s.data[0]
+
+	expected := firstValue * math.Pow((1 + s.perPeriodReturn), float64(i))
+	return s.data[i] - expected
 }
 
-func (s *statsAccumulator) Max() (float64) {
-	return s.max
+func (s *statsAccumulator) PerPeriodReturn() float64 {
+	s.freeze()
+	return s.perPeriodReturn
 }
 
-func (s *statsAccumulator) Mean() (float64) {
-	return s.total / float64(s.numItems)
+func (s *statsAccumulator) Mean() float64 {
+	s.freeze()
+	return s.perPeriodReturn
 }
 
-func (s *statsAccumulator) StdDev() (float64) {
-	mean := s.Mean()
-	return math.Sqrt(s.totalSquared / float64(s.numItems) - mean * mean)
+func (s *statsAccumulator) StdDev() float64 {
+	s.freeze()
+	return s.stddev
 }

@@ -16,9 +16,6 @@ import "fmt"
 
 var dateRe *regexp.Regexp
 
-const samplingIntervalSecs = (3600 * 24 * 24)
-const samplingInterval = time.Duration(time.Second * samplingIntervalSecs)
-
 type Database struct {
 	Path string
 	db *sqlite3.Database
@@ -48,14 +45,15 @@ type SecurityStats struct {
 
 func (db *Database) Stats(ticker string, r *dateRange) (SecurityStats, error) {
 	var stats SecurityStats;
-	acc := new(statsAccumulator);
+	acc := newStatsAccumulator(ticker);
 
 	s1, err := db.FindSecurity(ticker)
 	if err != nil { return stats, err }
-	for _, price := range s1.priceMap {
-		acc.Add(price)
-	}
 
+	for i := r.Begin(); !i.Done(); i.Next() {
+		t := i.Time().Unix()
+		acc.Add(s1.priceMap[t])
+	}
 	stats.Mean = acc.Mean()
 	stats.Stddev = acc.StdDev()
 	return stats, nil
@@ -63,7 +61,7 @@ func (db *Database) Stats(ticker string, r *dateRange) (SecurityStats, error) {
 
 func (db *Database) Correlation (ticker1 string, ticker2 string) (float64, error) {
 	p := TickerPair{ ticker1: ticker1, ticker2 : ticker2 }
-	if p.ticker1 == p.ticker2 { return 1.0, nil }
+	// if p.ticker1 == p.ticker2 { return 1.0, nil }
 	if p.ticker1 > p.ticker2 {
 		p.ticker1, p.ticker2 = p.ticker2, p.ticker1
 	}
@@ -77,9 +75,9 @@ func (db *Database) Correlation (ticker1 string, ticker2 string) (float64, error
 	if err != nil { return -1.0, err }
 
 	dateRange := s1.dateRange.Intersect(s2.dateRange)
-
-	stats1 := new(statsAccumulator);
-	stats2 := new(statsAccumulator);
+	log.Print("RANGE: ", s1.dateRange, s2.dateRange, dateRange)
+	stats1 := newStatsAccumulator(ticker1)
+	stats2 := newStatsAccumulator(ticker2)
 
 	for i := dateRange.Begin(); !i.Done(); i.Next() {
 		t := i.Time().Unix()
@@ -88,11 +86,8 @@ func (db *Database) Correlation (ticker1 string, ticker2 string) (float64, error
 	}
 
 	var diffTotal float64 = 0.0
-	for i := dateRange.Begin(); !i.Done(); i.Next() {
-		t := i.Time().Unix()
-		value1 := s1.priceMap[t]
-		value2 := s2.priceMap[t]
-		diffTotal += (value1 - stats1.Mean()) * (value2 - stats2.Mean())
+	for period := 0; period < stats1.NumItems(); period++ {
+		diffTotal += stats1.DeltaForPeriod(period) * stats2.DeltaForPeriod(period)
 	}
 	corr = diffTotal / float64(stats1.NumItems()) / stats1.StdDev() / stats2.StdDev()
 	db.correlationCache[p] = corr
@@ -123,8 +118,8 @@ func (db *Database) FindSecurity(ticker string) (*Security, error) {
 
 	now := time.Now()
 	dateRange := db.GetDateRange(ticker)
-	if dateRange.Empty() || (now.Sub(dateRange.End()) >= samplingInterval * 4) {
-		log.Print("Filling ", ticker, " from interweb")
+	if dateRange.Empty() || (now.Sub(dateRange.End()) >= 24 * 3600 * 30) {
+		log.Print("Filling ", ticker, " from interweb, range=", dateRange.String(), now.Sub(dateRange.End()))
 		err := db.fillFromYahoo(ticker)
 		if err != nil { return nil, err }
 	}
@@ -135,7 +130,7 @@ func (db *Database) FindSecurity(ticker string) (*Security, error) {
 	var minDate time.Time
 	var maxDate time.Time
 	for i := dateRange.Begin(); !i.Done(); i.Next() {
-		price := searchPrice(db, ticker, i.Time(), samplingInterval)
+		price := searchPrice(db, ticker, i.Time(), minInterval)
 		if price >= 0.0 {
 			if minDate.IsZero() || minDate.After(i.Time()) {
 				minDate = i.Time()
@@ -148,7 +143,7 @@ func (db *Database) FindSecurity(ticker string) (*Security, error) {
 			break;
 		}
 	}
-	s.dateRange = NewDateRange(minDate, maxDate, samplingInterval)
+	s.dateRange = NewDateRange(minDate, maxDate, minInterval)
 	db.cachedSecurities[ticker] = s
 	return s, nil;
 }
@@ -235,10 +230,6 @@ func (db Database) fillFromYahoo(ticker string) (error) {
 		return nil
 	}
 	defer resp.Body.Close()
-	/*r, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil
-	}*/
 	reader := csv.NewReader(resp.Body)
 	r, err := reader.ReadAll()
 	if err != nil {
@@ -266,7 +257,6 @@ func (db Database) fillFromYahoo(ticker string) (error) {
 		db.MustUpdate(sql)
 	}
 	db.MustUpdate("COMMIT TRANSACTION");
-	log.Print("End")
 	return nil
 }
 
@@ -296,7 +286,7 @@ func (db Database) GetDateRange(ticker string) (*dateRange) {
 			maxDate = time.Unix(val[1].(int64), 0)
 		}
 	})
-	return NewDateRange(minDate, maxDate, samplingInterval)
+	return NewDateRange(minDate, maxDate, time.Hour * 24)
 }
 
 func (db Database) FillCorrelationIfNecessary(ticker1 string, ticker2 string) (error) {

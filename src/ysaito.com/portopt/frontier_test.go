@@ -2,6 +2,7 @@
 // Created by Yaz Saito on 06/14/12.
 //
 package portopt
+
 /*
 import "testing"
 func testAssert(t *testing.T, b bool, messages... interface{}) {

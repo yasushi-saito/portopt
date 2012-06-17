@@ -5,11 +5,9 @@
 package portopt
 import "github.com/yasushi-saito/rbtree"
 
-const frontierMultiplier = 1000
-
 type frontierItem struct {
-	x int64
-	y int64
+	x float64
+	y float64
 	item interface{}
 }
 
@@ -26,11 +24,11 @@ func (iter frontierIterator) Item() interface{} {
 }
 
 func (iter frontierIterator) Mean() float64 {
-	return float64(iter.iter.Item().(frontierItem).x) / float64(frontierMultiplier)
+	return iter.iter.Item().(frontierItem).x
 }
 
 func (iter frontierIterator) Stddev() float64 {
-	return float64(iter.iter.Item().(frontierItem).y) / float64(frontierMultiplier)
+	return iter.iter.Item().(frontierItem).y
 }
 
 func (iter frontierIterator) Next() frontierIterator {
@@ -79,25 +77,24 @@ func isConcave(left, middle, right frontierItem) bool {
 	return middle.y < expectedY
 }
 
-func (f *frontier) IsMaxX(xf float64) bool {
-	x := int64(xf * 1000)
+func (f *frontier) MaxX() float64 {
 	if f.tree.Len() == 0 {
-		return true
+		return -1
 	}
-	return x >= getItem(f.tree.Max()).x - 1
+	return getItem(f.tree.Max()).x
 }
 
 func (f *frontier) Iterate() frontierIterator {
 	return frontierIterator{iter: f.tree.Min()}
 }
 
-func (f *frontier) Insert(xf, yf float64, item interface{}) (bool, bool) {
-	x := int64(xf * frontierMultiplier)
-	y := int64(yf * frontierMultiplier)
+func (f *frontier) Insert(x, y float64, item interface{}) (bool, bool) {
+	maxX := f.MaxX()
 
 	thisElem := frontierItem{x: x, y: y, item: item}
 	if f.tree.Len() == 0 {
 		f.tree.Insert(thisElem)
+		doAssert((x > maxX), " nb=", x, " mean=", x, " maxx=", maxX)
 		return true, true
 	}
 
@@ -116,12 +113,13 @@ func (f *frontier) Insert(xf, yf float64, item interface{}) (bool, bool) {
 	if leftIter.NegativeLimit() {
 		if y < getItem(f.tree.Min()).y {
 			f.tree.Insert(thisElem)
-			return true, true
+			return true, false
 		}
 		return false, false
 	}
 	if rightIter.Limit() {
 		f.tree.Insert(thisElem)
+		doAssert((x > maxX), " nb=", x, " mean=", x, " maxx=", maxX)
 		return true, true
 	}
 

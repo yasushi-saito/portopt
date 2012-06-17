@@ -4,7 +4,11 @@
 //
 
 package portopt
+import "log"
+import "fmt"
 import "time"
+
+const minInterval = time.Duration(time.Hour * 24 * 30) // 30 days
 type dateRange struct {
 	start time.Time
 	end time.Time
@@ -15,12 +19,24 @@ type dateRangeIterator struct {
 	t time.Time
 }
 
+func roundInterval(d time.Duration) time.Duration {
+	if d <= minInterval {
+		return minInterval
+	}
+	mod := d % minInterval
+	if mod < minInterval / 2 {
+		return d / minInterval * minInterval
+	}
+	return (d / minInterval + 1) * minInterval
+}
+
 func NewDateRange(
 	start time.Time,
 	end time.Time,
-	samplingInterval time.Duration) (*dateRange) {
-	intervalSecs := int64(samplingInterval / (1000 * 1000 * 1000))
-
+	desiredInterval time.Duration) (*dateRange) {
+	interval := roundInterval(desiredInterval)
+	log.Print("INTERVAL: ", desiredInterval, " ", interval)
+	intervalSecs := int64(interval / (1000 * 1000 * 1000))
 	quantizedStart := (start.Unix() / intervalSecs) * intervalSecs
 	quantizedEnd := (end.Unix() / intervalSecs) * intervalSecs
 
@@ -31,7 +47,11 @@ func NewDateRange(
 	return r
 }
 
-func (d *dateRange) Empty() (bool) {
+func (d *dateRange) String() string {
+	return fmt.Sprintf("[%v,%v,%v]", d.start, d.end, d.samplingInterval)
+}
+
+func (d *dateRange) Empty() bool {
 	return d.start.After(d.end)
 }
 
