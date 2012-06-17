@@ -106,7 +106,7 @@ func TestEff(t *testing.T) {
 	dateRange := NewDateRange(time.Date(1980, time.Month(1), 1, 0, 0, 0, 0, time.UTC),
 		time.Now(),
 		time.Duration(time.Hour * 24 * 90))
-
+/*
 	portfolio := NewPortfolio(db, dateRange, map[string]float64{
 		"VCADX": 1.0,  // CA interm bond
  		"VTMGX": 1.0, // tax-managed intl
@@ -124,12 +124,19 @@ func TestEff(t *testing.T) {
 		"VWO": 1.0,  // Emerging market ETF
 		"VSIAX": 1.0, // Small-cap value index adm
 		"VISVX": 1.0, // small-cap value index inv
-	})
+	})*/
 /*	portfolio := NewPortfolio(db, dateRange, map[string]float64{
 		"^GSPC": 1.0,  // S&P 500 index
 		"VBMFX" : 1.0,  // Vanguard total bond market index
 		"VGTSX" : 1.0,  // Vanguard total intl index
 	})*/
+
+	portfolio := NewPortfolio(db, dateRange, map[string]float64{
+		"^GSPC": 1.0,  // S&P 500 index
+		"VFSTX" : 1.0,  // Vanguard short-term investment grade
+		"VGTSX" : 1.0,  // Vanguard total intl index
+	})
+
 	frontier := newFrontier()
 	fifo := fifo_queue.NewQueue()
 	fifo.PushBack(portfolio)
@@ -141,9 +148,9 @@ func TestEff(t *testing.T) {
 		if mean >= frontier.MaxX() {
 			// Try many times to find a better return
 			maxTries = 200
-			fmt.Print(fifo.Len(), " New: Mean: ", mean, " Stddev: ", stddev, "\n")
+			// fmt.Print(fifo.Len(), " New: Mean: ", mean, " Stddev: ", stddev, "\n")
 		} else {
-			fmt.Print(fifo.Len(), " Ins: Mean: ", mean, " Stddev: ", stddev, "\n")
+			// fmt.Print(fifo.Len(), " Ins: Mean: ", mean, " Stddev: ", stddev, "\n")
 		}
 
 		for i := 0; i < maxTries; i++ {

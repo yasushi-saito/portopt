@@ -4,7 +4,6 @@
 package portopt
 
 import "testing"
-import "log"
 import "math/rand"
 
 func testAssert(t *testing.T, b bool, messages... interface{}) {

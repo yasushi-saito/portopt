@@ -4,7 +4,6 @@
 //
 
 package portopt
-import "log"
 import "fmt"
 import "time"
 
@@ -36,7 +35,6 @@ func NewDateRange(
 	end time.Time,
 	desiredInterval time.Duration) (*dateRange) {
 	interval := roundInterval(desiredInterval)
-	log.Print("INTERVAL: ", desiredInterval, " ", interval)
 	intervalSecs := int64(interval / (1000 * 1000 * 1000))
 	quantizedStart := (start.Unix() / intervalSecs) * intervalSecs
 	quantizedEnd := (end.Unix() / intervalSecs) * intervalSecs
@@ -66,11 +64,15 @@ func (d1 *dateRange) Inside(d2 *dateRange) (bool) {
 }
 
 func (d1 *dateRange) Intersect(d2 *dateRange) (*dateRange) {
-	if (d1.samplingInterval != d2.samplingInterval) {
-		panic("Trying to intersect ranges with different interval")
+	interval := d1.samplingInterval
+	if interval < d2.samplingInterval {
+		interval = d2.samplingInterval
+		// TODO: compute lcd?
+		doAssert(interval % d1.samplingInterval == 0)
 	}
+
 	n := new(dateRange)
-	n.samplingInterval = d1.samplingInterval
+	n.samplingInterval = interval
 	n.start = d1.start
 	if d2.start.After(n.start) { n.start = d2.start }
 

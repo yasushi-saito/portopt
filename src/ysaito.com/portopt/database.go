@@ -61,13 +61,16 @@ func (db *Database) Stats(ticker string, r *dateRange) (SecurityStats, error) {
 		return stats, nil
 	}
 
-	for i := r.Begin(); !i.Done(); i.Next() {
+	thisRange := s1.priceDateRange.Intersect(r)
+
+	for i := thisRange.Begin(); !i.Done(); i.Next() {
 		t := i.Time().Unix()
 		acc.Add(s1.priceMap[t])
 	}
 	stats.Mean = acc.Mean()
 	stats.Stddev = acc.StdDev()
 	s1.statsCache[r] = stats
+	log.Print("Stats: ", ticker, " ", s1.priceDateRange.String(), " ", r.String(), " mean=", stats.Mean, " stddev=", stats.Stddev)
 	return stats, nil
 }
 

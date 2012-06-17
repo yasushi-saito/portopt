@@ -108,10 +108,10 @@ func (f *frontier) Insert(x, y float64, item interface{}) bool {
 	if !rightIter.Limit() && x == getItem(rightIter).x {
 		// Exact match found
 		if y < getItem(rightIter).y {
-			f.tree.DeleteWithIterator(rightIter)
-			f.tree.Insert(thisElem)
 			f.maybeRemoveLeftElements(thisElem, leftIter.Prev())
 			f.maybeRemoveRightElements(thisElem, rightIter.Next())
+			f.tree.DeleteWithIterator(rightIter)
+			f.tree.Insert(thisElem)
 			return true
 		}
 		return false
