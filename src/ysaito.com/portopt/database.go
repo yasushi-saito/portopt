@@ -78,7 +78,7 @@ func (db *Database) Stats(ticker string, r *dateRange) (SecurityStats, error) {
 
 func (db *Database) Correlation (ticker1 string, ticker2 string) (float64, error) {
 	p := TickerPair{ ticker1: ticker1, ticker2 : ticker2 }
-	if p.ticker1 == p.ticker2 { return 1.0, nil }
+	// if p.ticker1 == p.ticker2 { return 1.0, nil }
 	if p.ticker1 > p.ticker2 {
 		p.ticker1, p.ticker2 = p.ticker2, p.ticker1
 	}
@@ -107,7 +107,6 @@ func (db *Database) Correlation (ticker1 string, ticker2 string) (float64, error
 	}
 	corr = diffTotal / float64(stats1.NumItems()) / stats1.StdDev() / stats2.StdDev()
 	db.correlationCache[p] = corr
-	log.Print("Corr: ", ticker1, "-", ticker2, ": ", corr)
 	return corr, nil
 }
 

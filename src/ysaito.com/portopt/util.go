@@ -1,6 +1,6 @@
 package portopt
-import "math"
 import "log"
+import "math"
 
 func doAssert(b bool, message... interface{}) {
 	if !b {
@@ -11,8 +11,8 @@ func doAssert(b bool, message... interface{}) {
 
 type statsAccumulator struct {
 	label string
-	frozen bool
-	data []float64
+	frozen bool     // true once any stats accessor is called
+	data []float64  // list of adjusted price quotes
 	perPeriodReturn float64
 	arithmeticMean float64
 	stddev float64
@@ -43,26 +43,20 @@ func (s *statsAccumulator) freeze() {
 	s.frozen = true
 
 	n := float64(len(s.data))
-	firstValue := s.data[0]
-	lastValue := s.data[len(s.data) - 1]
-	arithMean := 0.0
-	if lastValue >= firstValue {
-		s.perPeriodReturn = math.Pow((lastValue - firstValue), 1.0 / (n-1)) - 1
-	} else {
-		s.perPeriodReturn = math.Pow((firstValue - lastValue), 1.0 / (n-1)) - 1
-	}
 
-	delta2 := 0.0
-	for i, v := range s.data {
-		expected := firstValue * math.Pow((1 + s.perPeriodReturn), float64(i))
-		delta2 += (v - expected) * (v - expected)
-		arithMean += v
+	lastValue := -1.0
+	total := 0.0
+	total2 := 0.0
+	for i, value := range s.data {
+		if i > 0 {
+			delta := (value - lastValue) / lastValue
+			total += delta
+			total2 += delta * delta
+		}
+		lastValue = value
 	}
-	s.stddev = math.Sqrt(delta2 / n)
-	s.arithmeticMean = arithMean / n
-/*	log.Print("STAT: ", s.label, " values=", firstValue, ",", lastValue,
-		" x=", s.perPeriodReturn)*/
-
+	s.perPeriodReturn = total / n
+	s.stddev = math.Sqrt(total2 / n - s.perPeriodReturn * s.perPeriodReturn)
 }
 
 func (s *statsAccumulator) NumItems() int {
@@ -71,10 +65,12 @@ func (s *statsAccumulator) NumItems() int {
 
 func (s *statsAccumulator) DeltaForPeriod(i int) float64 {
 	s.freeze()
-	firstValue := s.data[0]
-
-	expected := firstValue * math.Pow((1 + s.perPeriodReturn), float64(i))
-	return s.data[i] - expected
+	if i == 0 {
+		return 0.0
+	}
+	value := s.data[i]
+	lastValue := s.data[i - 1]
+	return (value - lastValue) / lastValue
 }
 
 func (s *statsAccumulator) PerPeriodReturn() float64 {
@@ -84,7 +80,7 @@ func (s *statsAccumulator) PerPeriodReturn() float64 {
 
 func (s *statsAccumulator) ArithmeticMean() float64 {
 	s.freeze()
-	return s.arithmeticMean
+	return s.perPeriodReturn
 }
 
 func (s *statsAccumulator) StdDev() float64 {
